@@ -1,5 +1,5 @@
 // ********************************************************************************
-//! https://github.com/PatrickTorgerson/chess
+//! https://github.com/PatrickTorgerson/hellochess
 //! Copyright (c) 2022 Patrick Torgerson
 //! MIT license, see LICENSE for more information
 // ********************************************************************************
@@ -112,14 +112,15 @@ pub fn symbol(piece: Piece) []const u8 {
             .queen => "♛",
             .king => "♚",
         }
-    else return switch (piece.class()) {
-        .pawn => "♙",
-        .knight => "♘",
-        .bishop => "♗",
-        .rook => "♖",
-        .queen => "♕",
-        .king => "♔",
-    };
+    else
+        return switch (piece.class()) {
+            .pawn => "♙",
+            .knight => "♘",
+            .bishop => "♗",
+            .rook => "♖",
+            .queen => "♕",
+            .king => "♔",
+        };
 }
 
 /// compare piece with class and affiliation for equality

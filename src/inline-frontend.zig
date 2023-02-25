@@ -1,5 +1,5 @@
 // ********************************************************************************
-//! https://github.com/PatrickTorgerson/chess
+//! https://github.com/PatrickTorgerson/hellochess
 //! Copyright (c) 2022 Patrick Torgerson
 //! MIT license, see LICENSE for more information
 // ********************************************************************************
@@ -9,7 +9,7 @@
 //! as the calling command line
 
 const std = @import("std");
-const chess = @import("chess.zig");
+const chess = @import("hellochess.zig");
 const zcon = @import("zcon");
 
 /// characters high the rendering area is
@@ -39,7 +39,7 @@ pub fn entry_point() !void {
 
         // status line
         zcon.clear_line();
-        zcon.print(" {s}: {s}\n\n", .{input_buffer[0..input_size], status});
+        zcon.print(" {s}: {s}\n\n", .{ input_buffer[0..input_size], status });
         zcon.set_color(.default);
 
         // prompt
@@ -51,17 +51,21 @@ pub fn entry_point() !void {
         if (is_command(input)) {
             const should_break = do_commands(input);
             if (should_break) break;
-        }
-        else {
+        } else {
             const result = board.submit_move(turn_affiliation, input);
             status = status_from_move_result(result, input);
 
             if (was_successful_move(result)) {
                 // whose turn is it anyway?
                 turn_affiliation = if (turn_affiliation == .white)
-                    .black else .white;
+                    .black
+                else
+                    .white;
+
                 prompt = if (turn_affiliation == .white)
-                    "#cyn white to move #def" else "#yel black to move #def";
+                    "#cyn white to move #def"
+                else
+                    "#yel black to move #def";
             }
         }
     }
@@ -73,7 +77,7 @@ pub fn entry_point() !void {
 fn prime_buffer() void {
     var i: i32 = 0;
     while (i < render_height) : (i += 1)
-        zcon.print("{s: <[w]}\n", .{.s = " ", .w = render_width});
+        zcon.print("{s: <[w]}\n", .{ .s = " ", .w = render_width });
     zcon.set_cursor_x(1);
     zcon.cursor_up(render_height);
 }
@@ -81,16 +85,17 @@ fn prime_buffer() void {
 /// writes the chess board to the buffer
 fn render_board() !void {
     zcon.write(file_line);
-    var pos = chess.Coordinate.init(0,7); // a8
+    var pos = chess.Coordinate.init(0, 7); // a8
     while (pos.rank >= 0) : (pos.rank -= 1) {
         zcon.print("#dgry {} ", .{pos.rank + 1});
         while (pos.file < 8) : (pos.file += 1) {
             if (board.at(pos)) |piece| {
                 const piece_col = if (piece.affiliation() == .white)
-                    "#cyn" else "#yel";
-                zcon.print("{s}{u} ", .{piece_col, piece.character()});
-            }
-            else zcon.write("#dgry . ");
+                    "#cyn"
+                else
+                    "#yel";
+                zcon.print("{s}{u} ", .{ piece_col, piece.character() });
+            } else zcon.write("#dgry . ");
         }
         zcon.print("#dgry {}\n", .{pos.rank + 1});
         pos.file = 0;
@@ -102,7 +107,7 @@ fn render_board() !void {
 
 /// read input from user
 fn read_input() ![]const u8 {
-    const count = try std.io.getStdIn().read(&input_buffer)-2;
+    const count = try std.io.getStdIn().read(&input_buffer) - 2;
     input_size = count;
     return input_buffer[0..count];
 }
@@ -116,16 +121,13 @@ fn is_command(input: []const u8) bool {
 fn do_commands(input: []const u8) bool {
     if (std.mem.eql(u8, input, "/exit")) {
         return true;
-    }
-    else if (std.mem.eql(u8, input, "/reset")) {
+    } else if (std.mem.eql(u8, input, "/reset")) {
         board = chess.Board.init();
         turn_affiliation = .white;
         status = "yes sir";
-    }
-    else if (std.mem.eql(u8, input, "/help")) {
+    } else if (std.mem.eql(u8, input, "/help")) {
         status = "#wht '/exit'  '/help [CMD]'  '/reset'";
-    }
-    else if (input.len > 5 and std.mem.eql(u8, input[1..5], "help")) {
+    } else if (input.len > 5 and std.mem.eql(u8, input[1..5], "help")) {
         var cmd = input[6..];
 
         // trim whitespace
@@ -135,8 +137,7 @@ fn do_commands(input: []const u8) bool {
             cmd = cmd[0 .. cmd.len - 2];
 
         status = status_for_cmd_help(cmd);
-    }
-    else status = "#red Unrecognized command #def";
+    } else status = "#red Unrecognized command #def";
 
     return false;
 }
@@ -145,11 +146,9 @@ fn do_commands(input: []const u8) bool {
 fn status_for_cmd_help(cmd: []const u8) []const u8 {
     if (std.mem.eql(u8, cmd, "exit")) {
         return "quits the game, no saving";
-    }
-    else if (std.mem.eql(u8, cmd, "reset")) {
+    } else if (std.mem.eql(u8, cmd, "reset")) {
         return "reset the board for a new game";
-    }
-    else if (std.mem.eql(u8, cmd, "help")) {
+    } else if (std.mem.eql(u8, cmd, "help")) {
         return "print a list of available commands, or info on a specific command";
     }
 
@@ -178,7 +177,8 @@ fn status_from_move_result(move_result: chess.MoveResult, input: []const u8) []c
 fn bad_notation_status(input: []const u8) []const u8 {
     if (std.mem.eql(u8, input, "exit") or
         std.mem.eql(u8, input, "reset") or
-        std.mem.eql(u8, input, "help")) {
+        std.mem.eql(u8, input, "help"))
+    {
         return "#red did you forget a slash?";
     }
 
@@ -193,7 +193,7 @@ fn win_status() []const u8 {
 }
 
 fn was_successful_move(move_result: chess.MoveResult) bool {
-        return switch (move_result) {
+    return switch (move_result) {
         .ok => true,
         .ok_check => true,
         .ok_mate => true,

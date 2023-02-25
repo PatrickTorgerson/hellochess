@@ -1,5 +1,5 @@
 // ********************************************************************************
-//! https://github.com/PatrickTorgerson/chess
+//! https://github.com/PatrickTorgerson/hellochess
 //! Copyright (c) 2022 Patrick Torgerson
 //! MIT license, see LICENSE for more information
 // ********************************************************************************
@@ -168,18 +168,15 @@ pub fn submit_move(board: *Board, affiliation: Affiliation, move_notation: []con
                         if (board.at(dest)) |to_capture| {
                             if (to_capture.affiliation() == affiliation)
                                 return .blocked;
-                        }
-                        else return .no_visibility;
+                        } else return .no_visibility;
                         return board.make_move(.{
                             .piece = Piece.init(.pawn, affiliation),
                             .location = dest.offsetted(f - dest.file, affiliation.reverse_direction()),
                             .destination = dest,
                         });
-                    }
-                    else return .bad_disambiguation;
+                    } else return .bad_disambiguation;
                 }
-            }
-            else {
+            } else {
                 const left_piece = board.at(dest.offsetted(-1, affiliation.reverse_direction()));
                 const right_piece = board.at(dest.offsetted(1, affiliation.reverse_direction()));
 
@@ -229,6 +226,5 @@ pub fn make_move(board: *Board, move: Move) MoveResult {
         board.squares[move.location.to_1d()] = Square.empty();
         board.squares[move.destination.to_1d()] = Square.init(move.piece);
         return .ok;
-    }
-    else return .no_such_piece;
+    } else return .no_such_piece;
 }

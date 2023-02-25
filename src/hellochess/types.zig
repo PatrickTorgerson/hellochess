@@ -1,5 +1,5 @@
 // ********************************************************************************
-//! https://github.com/PatrickTorgerson/chess
+//! https://github.com/PatrickTorgerson/hellochess
 //! Copyright (c) 2022 Patrick Torgerson
 //! MIT license, see LICENSE for more information
 // ********************************************************************************
@@ -12,7 +12,6 @@ const Piece = @import("Piece.zig");
 ///  Coordinate of a square on a chess board, rank and file
 ///
 pub const Coordinate = struct {
-
     /// row, vertical pos
     rank: i8,
     // column, horizantal pos
@@ -95,11 +94,11 @@ pub const Coordinate = struct {
 
     test "2d 1d mapping" {
         try std.testing.expectEqual(@as(usize, 5), Coordinate.from_1d(5).to_1d());
-        const pos = Coordinate.init(4,7);
+        const pos = Coordinate.init(4, 7);
         try std.testing.expectEqual(pos, Coordinate.from_1d(pos.to_1d()));
-        try std.testing.expectEqual(@as(usize, 0), Coordinate.init(0,0).to_1d());
-        try std.testing.expectEqual(@as(usize, 35), Coordinate.init(4,3).to_1d());
-        try std.testing.expectEqual(Coordinate.init(4,3), Coordinate.from_1d(35));
+        try std.testing.expectEqual(@as(usize, 0), Coordinate.init(0, 0).to_1d());
+        try std.testing.expectEqual(@as(usize, 35), Coordinate.init(4, 3).to_1d());
+        try std.testing.expectEqual(Coordinate.init(4, 3), Coordinate.from_1d(35));
     }
 };
 
@@ -126,12 +125,11 @@ pub const Square = struct {
 
     /// return the pice on this square, null if empty
     pub fn piece(square: Square) ?Piece {
-        if(square.bits & 0b10000000 == 0) {
+        if (square.bits & 0b10000000 == 0) {
             return Piece{
                 .bits = square.bits & 0b00011111,
             };
-        }
-        else return null;
+        } else return null;
     }
 };
 

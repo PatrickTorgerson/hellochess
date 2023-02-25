@@ -1,5 +1,5 @@
 // ********************************************************************************
-//! https://github.com/PatrickTorgerson/chess
+//! https://github.com/PatrickTorgerson/hellochess
 //! Copyright (c) 2022 Patrick Torgerson
 //! MIT license, see LICENSE for more information
 // ********************************************************************************
