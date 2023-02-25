@@ -1,0 +1,3 @@
+[submodule "src/zcon"]
+	path = src/zcon
+	url = https://github.com/PatrickTorgerson/zcon.git
