@@ -2,7 +2,7 @@
 
 ![inline frontend](img/inline-frontend.png)
 
-A currently unfinished implementation of chess with a ascii terminal front-end.
+A currently unfinished implementation of chess with an ascii terminal front-end.
 
 ---
 > MIT License
