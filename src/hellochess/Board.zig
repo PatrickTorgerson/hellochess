@@ -9,6 +9,7 @@ const types = @import("types.zig");
 
 const Board = @This();
 const Piece = @import("Piece.zig");
+const Notation = @import("Notation.zig");
 
 const Class = Piece.Class;
 const Affiliation = Piece.Affiliation;
@@ -85,73 +86,33 @@ pub fn at(board: Board, pos: Coordinate) ?Piece {
 /// submit move, move to be made pending validation
 /// uses standard chess notation (https://en.wikipedia.org/wiki/Algebraic_notation_(chess))
 pub fn submit_move(board: *Board, affiliation: Affiliation, move_notation: []const u8) MoveResult {
-    //  == move notation regex
-    // "[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8](=[NBRQ])?[+#]?"
-
-    var move: []const u8 = move_notation;
-
-    if (move.len < 2) return .bad_notation;
-
-    const class_to_move: Class = switch (move[0]) {
-        'N' => .knight,
-        'B' => .bishop,
-        'R' => .rook,
-        'Q' => .queen,
-        'K' => .king,
-        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'x' => .pawn,
-        else => return .bad_notation,
-    };
-
-    if (class_to_move != .pawn)
-        move = move[1..];
-
-    var file: ?i8 = null;
-    var rank: ?i8 = null;
-    if (move.len >= 2 and (move[0] != 'x' and (move[1] == 'x' or (move[1] >= 'a' and move[1] <= 'h')))) {
-        switch (move[0]) {
-            'a'...'h' => file = Coordinate.file_from_char(move[0]),
-            '1'...'8' => rank = Coordinate.rank_from_char(move[0]),
-            else => return .bad_notation,
-        }
-        move = move[1..];
-    }
-
-    var expect_capture = false;
-    if (move.len > 0 and move[0] == 'x') {
-        expect_capture = true;
-        move = move[1..];
-    }
-
-    if (move.len < 2) return .bad_notation;
-    if (move[0] < 'a' or move[0] > 'h') return .bad_notation;
-    if (move[1] < '1' or move[1] > '8') return .bad_notation;
-    const dest = Coordinate.from_string(move[0..2]);
+    const move = Notation.parse(move_notation) orelse return .bad_notation;
 
     // find a piece
-    if (class_to_move == .pawn) {
+    if (move.class == .pawn) {
         // push
-        if (board.at(dest.offsetted(0, affiliation.reverse_direction()))) |piece| {
-            if (!expect_capture and piece.eq(.pawn, affiliation)) {
-                if (board.at(dest) != null)
+        if (board.at(move.destination.offsetted(0, affiliation.reverse_direction()))) |piece| {
+            if (!move.expect_capture and piece.eq(.pawn, affiliation)) {
+                if (board.at(move.destination) != null)
                     return .blocked;
                 return board.make_move(.{
                     .piece = Piece.init(.pawn, affiliation),
-                    .location = dest.offsetted(0, affiliation.reverse_direction()),
-                    .destination = dest,
+                    .location = move.destination.offsetted(0, affiliation.reverse_direction()),
+                    .destination = move.destination,
                 });
             }
         }
 
         // push x2 (if on starting rank)
-        if (!expect_capture and dest.rank == affiliation.double_push_rank()) {
-            if (board.at(dest.offsetted(0, affiliation.reverse_direction() * 2))) |piece| {
+        if (!move.expect_capture and move.destination.rank == affiliation.double_push_rank()) {
+            if (board.at(move.destination.offsetted(0, affiliation.reverse_direction() * 2))) |piece| {
                 if (piece.eq(.pawn, affiliation)) {
-                    if (board.at(dest.offsetted(0, affiliation.reverse_direction())) != null)
+                    if (board.at(move.destination.offsetted(0, affiliation.reverse_direction())) != null)
                         return .blocked;
                     return board.make_move(.{
                         .piece = Piece.init(.pawn, affiliation),
-                        .location = dest.offsetted(0, affiliation.reverse_direction() * 2),
-                        .destination = dest,
+                        .location = move.destination.offsetted(0, affiliation.reverse_direction() * 2),
+                        .destination = move.destination,
                     });
                 }
             }
@@ -159,26 +120,26 @@ pub fn submit_move(board: *Board, affiliation: Affiliation, move_notation: []con
 
         // capture
         // TODO: en passant
-        if (expect_capture) {
-            if (file) |f| {
-                if (f != dest.file + 1 and f != dest.file - 1)
+        if (move.expect_capture) {
+            if (move.source_file) |f| {
+                if (f != move.destination.file + 1 and f != move.destination.file - 1)
                     return .no_visibility;
-                if (board.at(dest.offsetted(f - dest.file, affiliation.reverse_direction()))) |piece| {
+                if (board.at(move.destination.offsetted(f - move.destination.file, affiliation.reverse_direction()))) |piece| {
                     if (piece.eq(.pawn, affiliation)) {
-                        if (board.at(dest)) |to_capture| {
+                        if (board.at(move.destination)) |to_capture| {
                             if (to_capture.affiliation() == affiliation)
                                 return .blocked;
                         } else return .no_visibility;
                         return board.make_move(.{
                             .piece = Piece.init(.pawn, affiliation),
-                            .location = dest.offsetted(f - dest.file, affiliation.reverse_direction()),
-                            .destination = dest,
+                            .location = move.destination.offsetted(f - move.destination.file, affiliation.reverse_direction()),
+                            .destination = move.destination,
                         });
                     } else return .bad_disambiguation;
                 }
             } else {
-                const left_piece = board.at(dest.offsetted(-1, affiliation.reverse_direction()));
-                const right_piece = board.at(dest.offsetted(1, affiliation.reverse_direction()));
+                const left_piece = board.at(move.destination.offsetted(-1, affiliation.reverse_direction()));
+                const right_piece = board.at(move.destination.offsetted(1, affiliation.reverse_direction()));
 
                 if (left_piece == null and right_piece == null)
                     return .no_visibility;
@@ -194,8 +155,8 @@ pub fn submit_move(board: *Board, affiliation: Affiliation, move_notation: []con
                     if (maybe_pawn.eq(.pawn, affiliation)) {
                         return board.make_move(.{
                             .piece = Piece.init(.pawn, affiliation),
-                            .location = dest.offsetted(-1, affiliation.reverse_direction()),
-                            .destination = dest,
+                            .location = move.destination.offsetted(-1, affiliation.reverse_direction()),
+                            .destination = move.destination,
                         });
                     }
                 }
@@ -204,8 +165,8 @@ pub fn submit_move(board: *Board, affiliation: Affiliation, move_notation: []con
                     if (maybe_pawn.eq(.pawn, affiliation)) {
                         return board.make_move(.{
                             .piece = Piece.init(.pawn, affiliation),
-                            .location = dest.offsetted(1, affiliation.reverse_direction()),
-                            .destination = dest,
+                            .location = move.destination.offsetted(1, affiliation.reverse_direction()),
+                            .destination = move.destination,
                         });
                     }
                 }

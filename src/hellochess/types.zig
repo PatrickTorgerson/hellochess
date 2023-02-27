@@ -82,14 +82,22 @@ pub const Coordinate = struct {
 
     /// return file from standard chess file letter ascii
     pub fn file_from_char(char: u8) i8 {
-        std.debug.assert(char >= 'a' and char <= 'h');
+        std.debug.assert(is_file(char));
         return @intCast(i8, char) - 'a';
     }
 
     /// return rank from standard chess rank number ascii
     pub fn rank_from_char(char: u8) i8 {
-        std.debug.assert(char >= '1' and char <= '8');
+        std.debug.assert(is_rank(char));
         return @intCast(i8, char) - '1';
+    }
+
+    pub fn is_rank(char: u8) bool {
+        return char >= '1' and char <= '8';
+    }
+
+    pub fn is_file(char: u8) bool {
+        return char >= 'a' and char <= 'h';
     }
 
     test "2d 1d mapping" {
