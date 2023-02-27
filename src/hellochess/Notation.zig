@@ -71,7 +71,7 @@ pub fn parse(move_notation: []const u8) ?Notation {
         move = move[1..];
 
     // disambiguation
-    if (move.len >= 3 and move[1] != 'x' and (
+    if (move.len >= 3 and move[0] != 'x' and (
         move[1] == 'x' or
         Coordinate.is_file(move[1]) or
         (Coordinate.is_rank(move[1]) and Coordinate.is_file(move[2]))

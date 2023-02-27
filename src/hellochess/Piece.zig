@@ -15,6 +15,14 @@ pub const Affiliation = enum(u8) {
     white = 0,
     black = 1,
 
+    /// returns other affiliation
+    pub fn opponent(affiliation_: Affiliation) Affiliation {
+        return switch (affiliation_) {
+            .white => .black,
+            .black => .white,
+        };
+    }
+
     /// return the direction pawns move, -1 or +1
     pub fn direction(affiliation_: Affiliation) i8 {
         return switch (affiliation_) {
@@ -32,6 +40,22 @@ pub const Affiliation = enum(u8) {
         return switch (affiliation_) {
             .white => 3, // 4
             .black => 4, // 5  zero based indecies am I right
+        };
+    }
+
+    /// return the second rank
+    pub fn second_rank(affiliation_: Affiliation) i8 {
+        return switch (affiliation_) {
+            .white => 1, // 2
+            .black => 6, // 7  zero based indecies am I right
+        };
+    }
+
+    /// return the back rank
+    pub fn back_rank(affiliation_: Affiliation) i8 {
+        return switch (affiliation_) {
+            .white => 0, // 1
+            .black => 7, // 8  zero based indecies am I right
         };
     }
 };

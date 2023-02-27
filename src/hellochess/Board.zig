@@ -83,103 +83,6 @@ pub fn at(board: Board, pos: Coordinate) ?Piece {
     return board.squares[pos.to_1d()].piece();
 }
 
-/// submit move, move to be made pending validation
-/// uses standard chess notation (https://en.wikipedia.org/wiki/Algebraic_notation_(chess))
-pub fn submit_move(board: *Board, affiliation: Affiliation, move_notation: []const u8) MoveResult {
-    const move = Notation.parse(move_notation) orelse return .bad_notation;
-
-    // find a piece
-    if (move.class == .pawn) {
-        // push
-        if (board.at(move.destination.offsetted(0, affiliation.reverse_direction()))) |piece| {
-            if (!move.expect_capture and piece.eq(.pawn, affiliation)) {
-                if (board.at(move.destination) != null)
-                    return .blocked;
-                return board.make_move(.{
-                    .piece = Piece.init(.pawn, affiliation),
-                    .location = move.destination.offsetted(0, affiliation.reverse_direction()),
-                    .destination = move.destination,
-                });
-            }
-        }
-
-        // push x2 (if on starting rank)
-        if (!move.expect_capture and move.destination.rank == affiliation.double_push_rank()) {
-            if (board.at(move.destination.offsetted(0, affiliation.reverse_direction() * 2))) |piece| {
-                if (piece.eq(.pawn, affiliation)) {
-                    if (board.at(move.destination.offsetted(0, affiliation.reverse_direction())) != null)
-                        return .blocked;
-                    return board.make_move(.{
-                        .piece = Piece.init(.pawn, affiliation),
-                        .location = move.destination.offsetted(0, affiliation.reverse_direction() * 2),
-                        .destination = move.destination,
-                    });
-                }
-            }
-        }
-
-        // capture
-        // TODO: en passant
-        if (move.expect_capture) {
-            if (move.source_file) |f| {
-                if (f != move.destination.file + 1 and f != move.destination.file - 1)
-                    return .no_visibility;
-                if (board.at(move.destination.offsetted(f - move.destination.file, affiliation.reverse_direction()))) |piece| {
-                    if (piece.eq(.pawn, affiliation)) {
-                        if (board.at(move.destination)) |to_capture| {
-                            if (to_capture.affiliation() == affiliation)
-                                return .blocked;
-                        } else return .no_visibility;
-                        return board.make_move(.{
-                            .piece = Piece.init(.pawn, affiliation),
-                            .location = move.destination.offsetted(f - move.destination.file, affiliation.reverse_direction()),
-                            .destination = move.destination,
-                        });
-                    } else return .bad_disambiguation;
-                }
-            } else {
-                const left_piece = board.at(move.destination.offsetted(-1, affiliation.reverse_direction()));
-                const right_piece = board.at(move.destination.offsetted(1, affiliation.reverse_direction()));
-
-                if (left_piece == null and right_piece == null)
-                    return .no_visibility;
-
-                if (left_piece != null and right_piece != null) {
-                    if (left_piece.?.neq(.pawn, affiliation) and right_piece.?.neq(.pawn, affiliation))
-                        return .no_visibility;
-                    if (left_piece.?.eq(.pawn, affiliation) and right_piece.?.eq(.pawn, affiliation))
-                        return .ambiguous_piece;
-                }
-
-                if (left_piece) |maybe_pawn| {
-                    if (maybe_pawn.eq(.pawn, affiliation)) {
-                        return board.make_move(.{
-                            .piece = Piece.init(.pawn, affiliation),
-                            .location = move.destination.offsetted(-1, affiliation.reverse_direction()),
-                            .destination = move.destination,
-                        });
-                    }
-                }
-
-                if (right_piece) |maybe_pawn| {
-                    if (maybe_pawn.eq(.pawn, affiliation)) {
-                        return board.make_move(.{
-                            .piece = Piece.init(.pawn, affiliation),
-                            .location = move.destination.offsetted(1, affiliation.reverse_direction()),
-                            .destination = move.destination,
-                        });
-                    }
-                }
-            }
-        }
-
-        return .no_visibility; // no piece if no pawns
-    }
-
-    // TODO: back rank pieces
-    return .no_visibility;
-}
-
 /// moves a pices to a different square, does no validation
 pub fn make_move(board: *Board, move: Move) MoveResult {
     if (board.at(move.location)) |piece| {
@@ -188,4 +91,235 @@ pub fn make_move(board: *Board, move: Move) MoveResult {
         board.squares[move.destination.to_1d()] = Square.init(move.piece);
         return .ok;
     } else return .no_such_piece;
+}
+
+/// submit move, move to be made pending validation
+/// uses standard chess notation (https://en.wikipedia.org/wiki/Algebraic_notation_(chess))
+pub fn submit_move(board: *Board, affiliation: Affiliation, move_notation: []const u8) MoveResult {
+    const move = Notation.parse(move_notation) orelse return .bad_notation;
+
+    if (board.at(move.destination)) |dest_piece| {
+        if (dest_piece.affiliation() == affiliation)
+            return .blocked;
+    }
+
+    var buffer: [32]usize = undefined;
+    const results = board.query(&buffer, .{
+        .class = move.class,
+        .affiliation = affiliation,
+        .target_coord = move.destination,
+        .source_file = move.source_file,
+        .source_rank = move.source_rank,
+    });
+
+    if (results.len > 1)
+        return .ambiguous_piece;
+    if (results.len == 0)
+        return .no_visibility;
+
+    // TODO: checks and mates
+
+    return board.make_move(.{
+        .piece = Piece.init(move.class, affiliation),
+        .location = Coordinate.from_1d(results[0]),
+        .destination = move.destination,
+    });
+}
+
+
+/// options for making querys with Board.query()
+pub const Query = struct {
+    /// search for pieces of this class
+    class: ?Class = null,
+    /// search for pieces of this affiliation
+    affiliation: ?Affiliation = null,
+    /// search for pieces that can move here
+    target_coord: ?Coordinate = null,
+    /// search for piecesthat can capture on target_coord
+    /// needed because pawns capture differently than they move
+    attacking: ?bool = null,
+    /// search for pieces on this file
+    source_file: ?i8 = null,
+    /// search for pieces on this rank
+    source_rank: ?i8 = null,
+};
+
+/// query's the board of pieces
+/// /param buffer buffer to write results to
+/// /param query_expr constraints to search for
+/// /returns slice into `buffer` containing 1d coordinates of matching pieces
+pub fn query(board: Board, buffer: *[32]usize, query_expr: Query) []const usize {
+    var count: usize = 0;
+
+    // write initial pieces with expected affiliation
+    for (board.squares) |square,i| {
+        if (square.piece()) |piece| {
+            if (query_expr.affiliation) |affiliation| {
+                if (piece.affiliation() == affiliation) {
+                    buffer[count] = i;
+                    count += 1;
+                }
+            } else {
+                buffer[count] = i;
+                count += 1;
+            }
+        }
+    }
+
+    // filter with expected class
+    if (query_expr.class) |class| {
+        var i: usize = 0;
+        while (i < count) {
+            const piece = board.squares[buffer[i]].piece().?;
+            if (piece.class() != class) {
+                // swap and pop delete
+                buffer[i] = buffer[count - 1];
+                count -= 1;
+            } else i += 1;
+        }
+    }
+
+    // filter with target_coord
+    if (query_expr.target_coord) |coord| {
+        var i: usize = 0;
+        while (i < count) {
+            if (!board.has_visability(buffer[i], coord.to_1d(), query_expr.attacking orelse false)) {
+                // swap and pop delete
+                buffer[i] = buffer[count - 1];
+                count -= 1;
+            } else i += 1;
+        }
+    }
+
+    // filter with source_file
+    if (query_expr.source_file) |file| {
+        var i: usize = 0;
+        while (i < count) {
+            if (Coordinate.from_1d(buffer[i]).file != file) {
+                // swap and pop delete
+                buffer[i] = buffer[count - 1];
+                count -= 1;
+            } else i += 1;
+        }
+    }
+
+    // filter with source_rank
+    if (query_expr.source_rank) |rank| {
+        var i: usize = 0;
+        while (i < count) {
+            if (Coordinate.from_1d(buffer[i]).rank != rank) {
+                // swap and pop delete
+                buffer[i] = buffer[count - 1];
+                count -= 1;
+            } else i += 1;
+        }
+    }
+
+    return buffer[0..count];
+}
+
+/// validate that the piece on source square can move to dest square
+/// does not consider checks
+/// can_capture ensures that the source piece can capture on dest, important for pawns
+/// takes source and dest as 1d coordinates
+fn has_visability(board: Board, source: usize, dest: usize, attacking: bool) bool {
+    std.debug.assert(source < board.squares.len);
+    std.debug.assert(dest < board.squares.len);
+    if (dest == source)
+        return false;
+    if (board.squares[source].piece()) |piece| {
+        const class = piece.class();
+        const affiliation = piece.affiliation();
+        const source2d = Coordinate.from_1d(source);
+        const dest2d = Coordinate.from_1d(dest);
+        switch (class) {
+            .pawn => {
+                // TODO: en passant
+                if (attacking) {
+                    return (dest2d.rank == source2d.rank + affiliation.direction()) and
+                        (dest2d.file == source2d.file + 1 or dest2d.file == source2d.file + 1);
+                } else {
+                    // double push
+                    if (dest2d.rank == affiliation.double_push_rank() and source2d.rank == affiliation.second_rank()) {
+                        return dest2d.file == source2d.file and
+                            board.at(source2d.offsetted(0, affiliation.direction())) == null and
+                            board.at(dest2d) == null;
+                    }
+                    // single push
+                    if (dest2d.file == source2d.file and dest2d.rank == source2d.rank + affiliation.direction())
+                        return board.at(dest2d) == null;
+                    // captures
+                    if ((dest2d.file == source2d.file + 1 or dest2d.file == source2d.file - 1) and dest2d.rank == source2d.rank + affiliation.direction())
+                        return board.at(dest2d) != null and board.at(dest2d).?.affiliation() == affiliation.opponent();
+                    return false;
+                }
+            },
+            .knight => {
+                const rank_diff: i8 = abs(dest2d.rank - source2d.rank);
+                const file_diff: i8 = abs(dest2d.file - source2d.file);
+                return (rank_diff == 2 and file_diff == 1) or (rank_diff == 1 and file_diff == 2);
+            },
+            .bishop => {
+                const rank_diff = dest2d.rank - source2d.rank;
+                const file_diff = dest2d.file - source2d.file;
+                if (abs(rank_diff) != abs(file_diff))
+                    return false;
+                return board.ensure_empty(source2d, dest2d);
+            },
+            .rook => {
+                if (dest2d.rank != source2d.rank and dest2d.file != source2d.file)
+                    return false;
+                return board.ensure_empty(source2d, dest2d);
+            },
+            .queen => {
+                const rank_diff = dest2d.rank - source2d.rank;
+                const file_diff = dest2d.file - source2d.file;
+                if (dest2d.rank != source2d.rank and dest2d.file != source2d.file and
+                    abs(rank_diff) != abs(file_diff))
+                    return false;
+                return board.ensure_empty(source2d, dest2d);
+            },
+            .king => {
+                if (dest2d.file > source2d.file + 1 or
+                    dest2d.file < source2d.file - 1 or
+                    dest2d.rank > source2d.rank + 1 or
+                    dest2d.rank < source2d.rank - 1)
+                    return false
+                else return true;
+            },
+        }
+    }
+    return false;
+}
+
+/// ensures all squares between source and dest are empty
+fn ensure_empty(board: Board, source: Coordinate, dest: Coordinate) bool {
+    const rank_diff = dest.rank - source.rank;
+    const file_diff = dest.file - source.file;
+    const length = std.math.sqrt(@intCast(u8, rank_diff * rank_diff + file_diff * file_diff));
+    const rank_delta = std.math.clamp(div(rank_diff, length), -1, 1);
+    const file_delta = std.math.clamp(div(file_diff, length), -1, 1);
+    var coord = source;
+    coord.rank += rank_delta;
+    coord.file += file_delta;
+    while (coord.valid() and coord.to_1d() != dest.to_1d()) {
+        if (board.squares[coord.to_1d()].piece()) |_|
+            return false;
+        coord.rank += rank_delta;
+        coord.file += file_delta;
+    }
+    return true;
+}
+
+/// divide n / d rounding away from zero
+fn div(n: i8, d: i8) i8 {
+    const quotiant = @intToFloat(f32, n) / @intToFloat(f32, d);
+    const sign = std.math.sign(quotiant);
+    const val = @fabs(quotiant);
+    return @floatToInt(i8, @ceil(val) * sign);
+}
+
+/// helper for absolute values
+fn abs(val: i8) i8 {
+    return std.math.absInt(val) catch std.math.maxInt(i8);
 }
