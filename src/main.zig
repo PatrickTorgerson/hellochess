@@ -6,9 +6,11 @@
 
 const std = @import("std");
 const zcon = @import("zcon");
-const inline_frontend = @import("inline-frontend.zig");
+const Frontend = @import("frontend/Frontend.zig");
+const InlineFrontend = @import("frontend/Inline.zig");
 
 pub fn main() !void {
     zcon.write("\n == Hello Chess ==\n #dgry '/exit' to quit , '/help' for more commands #def\n\n");
-    try inline_frontend.entry_point();
+    var frontend = InlineFrontend{ .frontend = Frontend.init() };
+    try frontend.run();
 }

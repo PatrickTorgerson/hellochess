@@ -126,7 +126,6 @@ pub fn submit_move(board: *Board, affiliation: Affiliation, move_notation: []con
     });
 }
 
-
 /// options for making querys with Board.query()
 pub const Query = struct {
     /// search for pieces of this class
@@ -152,7 +151,7 @@ pub fn query(board: Board, buffer: *[32]usize, query_expr: Query) []const usize 
     var count: usize = 0;
 
     // write initial pieces with expected affiliation
-    for (board.squares) |square,i| {
+    for (board.squares) |square, i| {
         if (square.piece()) |piece| {
             if (query_expr.affiliation) |affiliation| {
                 if (piece.affiliation() == affiliation) {
@@ -285,7 +284,8 @@ fn has_visability(board: Board, source: usize, dest: usize, attacking: bool) boo
                     dest2d.rank > source2d.rank + 1 or
                     dest2d.rank < source2d.rank - 1)
                     return false
-                else return true;
+                else
+                    return true;
             },
         }
     }
