@@ -4,50 +4,52 @@
 //! MIT license, see LICENSE for more information
 // ********************************************************************************
 
-pub const pawn_ascii =
+pub const pawn =
     \\
     \\
-    \\  ( )
-    \\  ) (
-    \\ /___\
+    \\   (.)
+    \\   ).(
+    \\  /___\
 ;
 
-pub const knight_ascii =
-    \\  _ ,
-    \\ // o\
-    \\ || ._)
-    \\ //  \
-    \\ /____\
+pub const knight =
+    \\   _ ,
+    \\  // o\
+    \\  || ._)
+    \\  //^^\
+    \\  /____\
 ;
 
-pub const bishop_ascii =
-    \\   ,
-    \\  (/)
-    \\  } {
-    \\  ) (
-    \\ /___\
+pub const bishop =
+    \\    ,
+    \\   (/)
+    \\   }.{
+    \\   ).(
+    \\  /___\
 ;
 
-pub const rook_ascii =
+pub const rook =
     \\
-    \\ [[|]]
-    \\  | |
-    \\  ) (
-    \\ /___\
+    \\  [[|]]
+    \\   |.|
+    \\   ).(
+    \\  /___\
 ;
 
-pub const queen_ascii =
-    \\   .
-    \\ \\|//
-    \\  ) (
-    \\  ) (
-    \\ /___\
+pub const queen =
+    \\    .
+    \\  \\|//
+    \\   ).(
+    \\   ).(
+    \\  /___\
 ;
 
-pub const king_ascii =
-    \\   +
-    \\ (   )
-    \\  ) (
-    \\  ) (
-    \\ /___\
+pub const king =
+    \\    +
+    \\  (^^^)
+    \\   ).(
+    \\   ).(
+    \\  /___\
 ;
+
+pub const empty = "          \n          \n          \n          \n        ";

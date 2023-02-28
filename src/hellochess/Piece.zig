@@ -91,6 +91,19 @@ pub const Class = enum(u8) {
             .king => 'K',
         };
     }
+
+    /// return ascii art for class
+    pub fn ascii(class_: Class) []const u8 {
+        const piece_ascii = @import("piece_ascii.zig");
+        return switch (class_) {
+            .pawn => piece_ascii.pawn,
+            .knight => piece_ascii.knight,
+            .bishop => piece_ascii.bishop,
+            .rook => piece_ascii.rook,
+            .queen => piece_ascii.queen,
+            .king => piece_ascii.king,
+        };
+    }
 };
 
 /// encodes a pieces class and affiliation
@@ -123,6 +136,11 @@ pub fn value(piece: Piece) i32 {
 /// return character used to denote class in move notation
 pub fn character(piece: Piece) u8 {
     return piece.class().character();
+}
+
+/// return ascii art for class
+pub fn ascii(piece: Piece) []const u8 {
+    return piece.class().ascii();
 }
 
 /// return Unicode symbol used to render piece
