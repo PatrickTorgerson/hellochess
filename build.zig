@@ -5,6 +5,7 @@
 // ********************************************************************************
 
 const std = @import("std");
+const zcon = @import("src/zcon/build.zig");
 
 pub fn build(b: *std.build.Builder) void {
     // Standard target options allows the person running `zig build` to choose
@@ -18,12 +19,9 @@ pub fn build(b: *std.build.Builder) void {
     const mode = b.standardReleaseOptions();
 
     const exe = b.addExecutable("chess", "src/main.zig");
-    exe.addPackage(.{
-        .name = "zcon",
-        .source = .{ .path = "src/zcon/src/zcon.zig"},
-    });
     exe.setTarget(target);
     exe.setBuildMode(mode);
+    zcon.link(b, exe);
     exe.install();
 
     const run_cmd = exe.run();

@@ -1,7 +1,7 @@
 // ********************************************************************************
-//! https://github.com/PatrickTorgerson/hellochess
-//! Copyright (c) 2022 Patrick Torgerson
-//! MIT license, see LICENSE for more information
+//  https://github.com/PatrickTorgerson/hellochess
+//  Copyright (c) 2022 Patrick Torgerson
+//  MIT license, see LICENSE for more information
 // ********************************************************************************
 
 const std = @import("std");
@@ -13,29 +13,32 @@ const FullscreenFrontend = @import("frontend/Fullscreen.zig");
 var use_fullscreen: bool = false;
 
 pub fn main() !void {
-    if (!try parse_cli()) {
+    var writer = zcon.Writer.init();
+    defer writer.flush();
+
+    if (!try parseCli(&writer)) {
         return;
     }
 
     if (use_fullscreen) {
         var frontend = FullscreenFrontend{ .frontend = Frontend.init() };
-        try frontend.run();
+        try frontend.run(&writer);
     } else {
         var frontend = InlineFrontend{ .frontend = Frontend.init() };
-        try frontend.run();
+        try frontend.run(&writer);
     }
 }
 
-pub fn parse_cli() !bool {
+pub fn parseCli(writer: *zcon.Writer) !bool {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     var allocator = arena.allocator();
-    var cli = try zcon.Cli.init(allocator, option, input);
+    var cli = try zcon.Cli.init(allocator, writer, option, input);
     defer cli.deinit();
 
     cli.help_callback = help;
 
-    try cli.add_option(.{
+    try cli.addOption(.{
         .alias_long = "fullscreen",
         .alias_short = "",
         .desc = "use the fullscreen frontend",
@@ -46,7 +49,7 @@ pub fn parse_cli() !bool {
 }
 
 pub fn option(cli: *zcon.Cli) !bool {
-    if (cli.is_arg("fullscreen")) {
+    if (cli.isArg("fullscreen")) {
         use_fullscreen = true;
         return true;
     }
@@ -59,6 +62,9 @@ pub fn input(cli: *zcon.Cli) !bool {
 }
 
 pub fn help(cli: *zcon.Cli) !bool {
-    _ = cli.print_help();
+    cli.writer.put("\n== Usage\n\n#indent hellochess [--fullscreen]\n\n== Options\n\n");
+    cli.writer.indent(1);
+    cli.printOptionHelp();
+    cli.writer.unindent(1);
     return false;
 }

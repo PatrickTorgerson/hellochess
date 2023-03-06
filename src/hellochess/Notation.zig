@@ -1,7 +1,7 @@
 // ********************************************************************************
-//* https://github.com/PatrickTorgerson/hellochess
-//* Copyright (c) 2022 Patrick Torgerson
-//* MIT license, see LICENSE for more information
+//  https://github.com/PatrickTorgerson/hellochess
+//  Copyright (c) 2022 Patrick Torgerson
+//  MIT license, see LICENSE for more information
 // ********************************************************************************
 
 //! internal struct representing a parsed PGN move
@@ -42,16 +42,13 @@ pub fn parse(move_notation: []const u8) ?Notation {
     if (std.mem.eql(u8, move, "O-O")) {
         parsed.castle_kingside = true;
         return parsed;
-    }
-    else if (std.mem.eql(u8, move, "0-0")) {
+    } else if (std.mem.eql(u8, move, "0-0")) {
         parsed.castle_kingside = true;
         return parsed;
-    }
-    else if (std.mem.eql(u8, move, "O-O-O")) {
+    } else if (std.mem.eql(u8, move, "O-O-O")) {
         parsed.castle_kingside = false;
         return parsed;
-    }
-    else if (std.mem.eql(u8, move, "0-0-0")) {
+    } else if (std.mem.eql(u8, move, "0-0-0")) {
         parsed.castle_kingside = false;
         return parsed;
     }
@@ -71,11 +68,10 @@ pub fn parse(move_notation: []const u8) ?Notation {
         move = move[1..];
 
     // disambiguation
-    if (move.len >= 3 and move[0] != 'x' and (
-        move[1] == 'x' or
+    if (move.len >= 3 and move[0] != 'x' and (move[1] == 'x' or
         Coordinate.is_file(move[1]) or
-        (Coordinate.is_rank(move[1]) and Coordinate.is_file(move[2]))
-    )) {
+        (Coordinate.is_rank(move[1]) and Coordinate.is_file(move[2]))))
+    {
         switch (move[0]) {
             'a'...'h' => parsed.source_file = Coordinate.file_from_char(move[0]),
             '1'...'8' => parsed.source_rank = Coordinate.rank_from_char(move[0]),

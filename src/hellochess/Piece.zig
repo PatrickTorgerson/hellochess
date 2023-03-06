@@ -1,7 +1,7 @@
 // ********************************************************************************
-//! https://github.com/PatrickTorgerson/hellochess
-//! Copyright (c) 2022 Patrick Torgerson
-//! MIT license, see LICENSE for more information
+//  https://github.com/PatrickTorgerson/hellochess
+//  Copyright (c) 2022 Patrick Torgerson
+//  MIT license, see LICENSE for more information
 // ********************************************************************************
 
 const std = @import("std");

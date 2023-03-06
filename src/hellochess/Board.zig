@@ -1,7 +1,7 @@
 // ********************************************************************************
-//! https://github.com/PatrickTorgerson/hellochess
-//! Copyright (c) 2022 Patrick Torgerson
-//! MIT license, see LICENSE for more information
+//  https://github.com/PatrickTorgerson/hellochess
+//  Copyright (c) 2022 Patrick Torgerson
+//  MIT license, see LICENSE for more information
 // ********************************************************************************
 
 const std = @import("std");
@@ -134,7 +134,7 @@ pub const Query = struct {
     affiliation: ?Affiliation = null,
     /// search for pieces that can move here
     target_coord: ?Coordinate = null,
-    /// search for piecesthat can capture on target_coord
+    /// search for pieces that can capture on target_coord
     /// needed because pawns capture differently than they move
     attacking: ?bool = null,
     /// search for pieces on this file
