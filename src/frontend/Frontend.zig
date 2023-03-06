@@ -77,34 +77,52 @@ pub fn promptText(turn_affiliation: chess.Piece.Affiliation) []const u8 {
 
 /// determines if input is a / command
 pub fn isCommand(input: []const u8) bool {
-    return input.len > 1 and input[0] == '/';
+    return input.len >= 1 and input[0] == '/';
 }
 
-/// handle / commands
+/// handle / commands, returns true if exit was requested
 pub fn doCommands(this: *Frontend, input: []const u8) bool {
-    if (std.mem.eql(u8, input, "/exit")) {
+    var arg_iter = ArgIterator.init(input);
+    const command = arg_iter.next() orelse "";
+
+    if (std.mem.eql(u8, command, "/exit")) {
         return true;
-    } else if (std.mem.eql(u8, input, "/reset")) {
+    } else if (std.mem.eql(u8, command, "/reset")) {
         this.board = chess.Board.init();
         this.turn_affiliation = .white;
         this.status = "yes sir";
-    } else if (std.mem.eql(u8, input, "/clear")) {
+    } else if (std.mem.eql(u8, command, "/clear")) {
         this.board = chess.Board.init_empty();
         this.turn_affiliation = .white;
         this.status = "gotcha";
-    } else if (std.mem.eql(u8, input, "/help")) {
-        this.status = "#wht '/exit'  '/help [CMD]'  '/reset'  '/clear'";
-    } else if (input.len > 5 and std.mem.eql(u8, input[1..5], "help")) {
-        var cmd = input[6..];
-
-        // trim whitespace
-        while (cmd.len > 0 and cmd[0] == ' ')
-            cmd = cmd[1..];
-        while (cmd.len > 0 and cmd[cmd.len - 1] == ' ')
-            cmd = cmd[0 .. cmd.len - 2];
-
-        this.status = Frontend.statusForCmdHelp(cmd);
-    } else this.status = "#red Unrecognized command #def";
+    } else if (std.mem.eql(u8, command, "/spawn-white")) {
+        const arg = arg_iter.next() orelse {
+            this.status = "#red expected argument #dgry(ex. Ba7)";
+            return false;
+        };
+        if (!this.spawnPiece(.white, arg))
+            this.status = arg //"#red invalid placement expression, must match '[RNBQK]?[a-h][1-8]'"
+        else
+            this.status = "for sure";
+    } else if (std.mem.eql(u8, command, "/spawn-black")) {
+        const arg = arg_iter.next() orelse {
+            this.status = "#red expected argument #dgry(ex. Qd4)";
+            return false;
+        };
+        if (!this.spawnPiece(.black, arg))
+            this.status = "#red invalid placement expression, must match '[RNBQK]?[a-h][1-8]'"
+        else
+            this.status = "no doubt";
+    } else if (std.mem.eql(u8, command, "/help")) {
+        const arg = arg_iter.next() orelse {
+            this.status = "#wht /exit  /help  /pass  /reset  /clear  /spawn-white  /spawn-black";
+            return false;
+        };
+        this.status = Frontend.statusForCmdHelp(arg);
+    } else if (std.mem.eql(u8, command, "/pass")) {
+        this.turn_affiliation = this.turn_affiliation.opponent();
+        this.status = "okie-doki";
+    } else this.status = "#red Unrecognized command";
 
     return false;
 }
@@ -116,9 +134,15 @@ fn statusForCmdHelp(cmd: []const u8) []const u8 {
     } else if (std.mem.eql(u8, cmd, "reset")) {
         return "reset the board for a new game";
     } else if (std.mem.eql(u8, cmd, "help")) {
-        return "print a list of available commands, or info on a specific command";
+        return "args: [CMD] ; print a list of available commands, or info on a specific command [CMD]";
     } else if (std.mem.eql(u8, cmd, "clear")) {
         return "clear all pieces from the board";
+    } else if (std.mem.eql(u8, cmd, "spawn-white")) {
+        return "args: <EX> ; spawns piece for white at given coord, eg. Rh8 or e3";
+    } else if (std.mem.eql(u8, cmd, "spawn-black")) {
+        return "args: <EX> ; spawns piece for black at given coord, eg. Nc2 or b6";
+    } else if (std.mem.eql(u8, cmd, "pass")) {
+        return "passes current turn without making a move";
     }
 
     return "#red no such command";
@@ -144,9 +168,16 @@ fn statusFromMoveResult(this: Frontend, move_result: chess.MoveResult, input: []
 }
 
 fn badNotationStatus(input: []const u8) []const u8 {
-    if (std.mem.eql(u8, input, "exit") or
-        std.mem.eql(u8, input, "reset") or
-        std.mem.eql(u8, input, "help"))
+    var arg_iter = ArgIterator.init(input);
+    const command = arg_iter.next() orelse "";
+
+    if (std.mem.eql(u8, command, "exit") or
+        std.mem.eql(u8, command, "reset") or
+        std.mem.eql(u8, command, "clear") or
+        std.mem.eql(u8, command, "pass") or
+        std.mem.eql(u8, command, "spawn-white") or
+        std.mem.eql(u8, command, "spawn-black") or
+        std.mem.eql(u8, command, "help"))
     {
         return "#red did you forget a slash?";
     }
@@ -179,3 +210,52 @@ fn wasSuccessfulMove(move_result: chess.MoveResult) bool {
         .blocked => false,
     };
 }
+
+fn spawnPiece(this: *Frontend, affiliation: chess.Piece.Affiliation, expr: []const u8) bool {
+    if (expr.len == 0) return false;
+    var i: usize = 0;
+    const class: chess.Piece.Class = switch (expr[i]) {
+        'N' => .knight,
+        'B' => .bishop,
+        'R' => .rook,
+        'Q' => .queen,
+        'K' => .king,
+        'a'...'h', '1'...'8' => .pawn,
+        else => return false,
+    };
+    if (class != .pawn)
+        i += 1;
+    if (expr.len != i + 2)
+        return false;
+    const coord = chess.Coordinate.from_string(expr[i .. i + 2]);
+    this.board.spawn(chess.Piece.init(class, affiliation), coord);
+    return true;
+}
+
+const ArgIterator = struct {
+    str: []const u8,
+    i: usize,
+
+    pub fn init(str: []const u8) ArgIterator {
+        return .{
+            .str = str,
+            .i = 0,
+        };
+    }
+
+    pub fn next(this: *ArgIterator) ?[]const u8 {
+        if (this.str.len == 0) return null;
+        while (this.i < this.str.len and this.str[this.i] == ' ')
+            this.i += 1;
+        if (this.i >= this.str.len) return null;
+
+        const end_char = if (this.str[this.i] == '\'' or this.str[this.i] == '\"')
+            this.str[this.i]
+        else
+            ' ';
+        const at = if (end_char == ' ') this.i else this.i + 1;
+        while (this.i < this.str.len and this.str[this.i] != end_char)
+            this.i += 1;
+        return this.str[at..this.i];
+    }
+};

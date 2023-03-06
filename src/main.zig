@@ -15,10 +15,18 @@ var use_fullscreen: bool = false;
 pub fn main() !void {
     var writer = zcon.Writer.init();
     defer writer.flush();
+    defer writer.useDefaultColors();
 
-    if (!try parseCli(&writer)) {
+    // parse command line
+    const parse_success = parseCli(&writer) catch |err| {
+        switch (err) {
+            // it would be cool if we could get the option name here :/
+            error.unrecognized_option => writer.put("\n#red unrecognized option\n"),
+            else => return err,
+        }
         return;
-    }
+    };
+    if (!parse_success) return;
 
     if (use_fullscreen) {
         var frontend = FullscreenFrontend{ .frontend = Frontend.init() };
@@ -33,6 +41,7 @@ pub fn parseCli(writer: *zcon.Writer) !bool {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     var allocator = arena.allocator();
+
     var cli = try zcon.Cli.init(allocator, writer, option, input);
     defer cli.deinit();
 
@@ -48,6 +57,7 @@ pub fn parseCli(writer: *zcon.Writer) !bool {
     return try cli.parse();
 }
 
+/// callback to handle command line options
 pub fn option(cli: *zcon.Cli) !bool {
     if (cli.isArg("fullscreen")) {
         use_fullscreen = true;
@@ -56,11 +66,13 @@ pub fn option(cli: *zcon.Cli) !bool {
     return false;
 }
 
+/// callback to handle non option commandline args
 pub fn input(cli: *zcon.Cli) !bool {
     _ = cli;
     return false;
 }
 
+/// callback to handle help options
 pub fn help(cli: *zcon.Cli) !bool {
     cli.writer.put("\n== Usage\n\n#indent hellochess [--fullscreen]\n\n== Options\n\n");
     cli.writer.indent(1);

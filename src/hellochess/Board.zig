@@ -83,6 +83,11 @@ pub fn at(board: Board, pos: Coordinate) ?Piece {
     return board.squares[pos.to_1d()].piece();
 }
 
+/// spawn piece at given coord
+pub fn spawn(board: *Board, piece: Piece, pos: Coordinate) void {
+    board.squares[pos.to_1d()] = Square.init(piece);
+}
+
 /// moves a pices to a different square, does no validation
 pub fn make_move(board: *Board, move: Move) MoveResult {
     if (board.at(move.location)) |piece| {
