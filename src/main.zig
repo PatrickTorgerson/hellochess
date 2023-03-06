@@ -11,6 +11,7 @@ const InlineFrontend = @import("frontend/Inline.zig");
 const FullscreenFrontend = @import("frontend/Fullscreen.zig");
 
 var use_fullscreen: bool = false;
+var use_dev_commands: bool = false;
 
 pub fn main() !void {
     var writer = zcon.Writer.init();
@@ -29,11 +30,11 @@ pub fn main() !void {
     if (!parse_success) return;
 
     if (use_fullscreen) {
-        var frontend = FullscreenFrontend{ .frontend = Frontend.init() };
-        try frontend.run(&writer);
+        var fullscreen = FullscreenFrontend{ .frontend = Frontend.passAndPlay(use_dev_commands) };
+        try fullscreen.run(&writer);
     } else {
-        var frontend = InlineFrontend{ .frontend = Frontend.init() };
-        try frontend.run(&writer);
+        var @"inline" = InlineFrontend{ .frontend = Frontend.passAndPlay(use_dev_commands) };
+        try @"inline".run(&writer);
     }
 }
 
@@ -53,6 +54,12 @@ pub fn parseCli(writer: *zcon.Writer) !bool {
         .desc = "use the fullscreen frontend",
         .help = "not sure this is used atm",
     });
+    try cli.addOption(.{
+        .alias_long = "enable-dev-commands",
+        .alias_short = "",
+        .desc = "enable access to dev commands",
+        .help = "not sure this is used atm",
+    });
 
     return try cli.parse();
 }
@@ -61,6 +68,10 @@ pub fn parseCli(writer: *zcon.Writer) !bool {
 pub fn option(cli: *zcon.Cli) !bool {
     if (cli.isArg("fullscreen")) {
         use_fullscreen = true;
+        return true;
+    } else if (cli.isArg("enable-dev-commands")) {
+        use_dev_commands = true;
+        // TODO: incompatable with network play
         return true;
     }
     return false;

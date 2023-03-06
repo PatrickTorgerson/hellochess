@@ -12,6 +12,12 @@ const zcon = @import("zcon");
 
 const Frontend = @This();
 
+const PlayMode = enum {
+    pass_and_play,
+    ai_opponent,
+    network_multiplayer,
+};
+
 /// stores user's input
 input_buffer: [64]u8 = undefined,
 /// characters in input_buffer
@@ -20,21 +26,71 @@ input_size: usize = 0,
 status: []const u8,
 /// big boi chess board
 board: chess.Board,
-/// whose turn it is
+/// piece color of client player
+player_affiliation: chess.Piece.Affiliation,
+/// whose turn is it anyway
 turn_affiliation: chess.Piece.Affiliation,
+/// I just like havin a doc comment on evry field ok
+play_mode: PlayMode,
+/// whether client has access to dev commands
+dev_commands: bool,
+
+// TODO: fields for network connection
 
 /// a new frontend
-pub fn init() Frontend {
+pub fn init(dev_commands: bool, play_mode: PlayMode, player_affiliation: chess.Piece.Affiliation) Frontend {
     return .{
         .status = "#wht Let's play some chess!",
         .board = chess.Board.init(),
         .turn_affiliation = .white,
+        .player_affiliation = player_affiliation,
+        .play_mode = play_mode,
+        .dev_commands = dev_commands,
     };
 }
 
-/// prompts the user for input, makes moves, and handles commands
+/// init a new pass and play frontend
+pub fn passAndPlay(dev_commands: bool) Frontend {
+    return Frontend.init(dev_commands, .pass_and_play, .white);
+}
+
+/// requests and makes next move
 /// returns true when exit is requested
-pub fn prompt(this: *Frontend, writer: *zcon.Writer) !bool {
+pub fn doTurn(this: *Frontend, writer: *zcon.Writer) !bool {
+    return switch (this.play_mode) {
+        .pass_and_play => try this.runPassAndPlay(writer),
+        .ai_opponent => unreachable, // TODO: implement
+        .network_multiplayer => unreachable, // TODO: implement
+    };
+}
+
+/// turn logic for pass and play mode, returns true if exit is requested
+pub fn runPassAndPlay(this: *Frontend, writer: *zcon.Writer) !bool {
+    const move = try this.clientMove(writer);
+
+    if (std.mem.eql(u8, move, "/exit"))
+        return true;
+    if (move.len > 0 and move[0] == '/')
+        return false;
+
+    _ = this.tryMove(move);
+    return false;
+}
+
+/// try to make move, swap turn and return true if successful
+pub fn tryMove(this: *Frontend, move: []const u8) bool {
+    const result = this.board.submitMove(this.turn_affiliation, move);
+    this.status = this.statusFromMoveResult(result, move);
+    const success = Frontend.wasSuccessfulMove(result);
+    if (success) {
+        this.turn_affiliation = this.turn_affiliation.opponent();
+    }
+    return success;
+}
+
+/// prompts client player for input, makes moves, and handles commands
+/// returns true when exit is requested
+pub fn clientMove(this: *Frontend, writer: *zcon.Writer) ![]const u8 {
     writer.clearLine();
     writer.fmt(" > {s}: ", .{Frontend.promptText(this.turn_affiliation)});
     writer.flush();
@@ -43,16 +99,10 @@ pub fn prompt(this: *Frontend, writer: *zcon.Writer) !bool {
 
     if (isCommand(input)) {
         const should_break = this.doCommands(input);
-        if (should_break) return true;
-    } else {
-        const result = this.board.submitMove(this.turn_affiliation, input);
-        this.status = this.statusFromMoveResult(result, input);
-        if (Frontend.wasSuccessfulMove(result)) {
-            this.turn_affiliation = this.turn_affiliation.opponent();
-        }
+        if (should_break) return "/exit";
     }
 
-    return false;
+    return input;
 }
 
 /// reads input from stdin
@@ -85,13 +135,32 @@ pub fn doCommands(this: *Frontend, input: []const u8) bool {
     var arg_iter = ArgIterator.init(input);
     const command = arg_iter.next() orelse "";
 
+    const help_line = "#wht /exit  /help  /reset";
+    const help_dev_commands = "#wht /exit  /help  /pass  /reset  /clear  /spawn-white  /spawn-black";
+
+    this.status = "#red Unrecognized command";
     if (std.mem.eql(u8, command, "/exit")) {
         return true;
     } else if (std.mem.eql(u8, command, "/reset")) {
         this.board = chess.Board.init();
         this.turn_affiliation = .white;
         this.status = "yes sir";
-    } else if (std.mem.eql(u8, command, "/clear")) {
+        return false;
+    } else if (std.mem.eql(u8, command, "/help")) {
+        const arg = arg_iter.next() orelse {
+            this.status = if (this.dev_commands) help_dev_commands else help_line;
+            return false;
+        };
+        this.status = Frontend.statusForCmdHelp(arg, this.dev_commands);
+        return false;
+    }
+
+    // -- dev commands
+    if (!this.dev_commands) {
+        return false;
+    }
+
+    if (std.mem.eql(u8, command, "/clear")) {
         this.board = chess.Board.initEmpty();
         this.turn_affiliation = .white;
         this.status = "gotcha";
@@ -101,7 +170,7 @@ pub fn doCommands(this: *Frontend, input: []const u8) bool {
             return false;
         };
         if (!this.spawnPiece(.white, arg))
-            this.status = arg //"#red invalid placement expression, must match '[RNBQK]?[a-h][1-8]'"
+            this.status = "#red invalid placement expression, must match '[RNBQK]?[a-h][1-8]'"
         else
             this.status = "for sure";
     } else if (std.mem.eql(u8, command, "/spawn-black")) {
@@ -113,12 +182,6 @@ pub fn doCommands(this: *Frontend, input: []const u8) bool {
             this.status = "#red invalid placement expression, must match '[RNBQK]?[a-h][1-8]'"
         else
             this.status = "no doubt";
-    } else if (std.mem.eql(u8, command, "/help")) {
-        const arg = arg_iter.next() orelse {
-            this.status = "#wht /exit  /help  /pass  /reset  /clear  /spawn-white  /spawn-black";
-            return false;
-        };
-        this.status = Frontend.statusForCmdHelp(arg);
     } else if (std.mem.eql(u8, command, "/pass")) {
         this.turn_affiliation = this.turn_affiliation.opponent();
         this.status = "okie-doki";
@@ -128,14 +191,19 @@ pub fn doCommands(this: *Frontend, input: []const u8) bool {
 }
 
 /// return help text for a specific / command
-fn statusForCmdHelp(cmd: []const u8) []const u8 {
+fn statusForCmdHelp(cmd: []const u8, include_dev_commands: bool) []const u8 {
     if (std.mem.eql(u8, cmd, "exit")) {
         return "quits the game, no saving";
     } else if (std.mem.eql(u8, cmd, "reset")) {
         return "reset the board for a new game";
     } else if (std.mem.eql(u8, cmd, "help")) {
         return "args: [CMD] ; print a list of available commands, or info on a specific command [CMD]";
-    } else if (std.mem.eql(u8, cmd, "clear")) {
+    }
+
+    if (!include_dev_commands)
+        return "#red no such command";
+
+    if (std.mem.eql(u8, cmd, "clear")) {
         return "clear all pieces from the board";
     } else if (std.mem.eql(u8, cmd, "spawn-white")) {
         return "args: <EX> ; spawns piece for white at given coord, eg. Rh8 or e3";
@@ -227,6 +295,8 @@ fn spawnPiece(this: *Frontend, affiliation: chess.Piece.Affiliation, expr: []con
         i += 1;
     if (expr.len != i + 2)
         return false;
+    if (!chess.Coordinate.isFile(expr[i])) return false;
+    if (!chess.Coordinate.isRank(expr[i + 1])) return false;
     const coord = chess.Coordinate.fromString(expr[i .. i + 2]);
     this.board.spawn(chess.Piece.init(class, affiliation), coord);
     return true;

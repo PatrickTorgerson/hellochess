@@ -39,7 +39,7 @@ pub fn run(this: *@This(), writer: *zcon.Writer) !void {
         writer.fmt(" #dgry {s}#def : {s}\n\n", .{ this.frontend.getLastInput(), this.frontend.status });
         writer.useDefaultColors();
 
-        if (try this.frontend.prompt(writer))
+        if (try this.frontend.doTurn(writer))
             break;
     }
 }
