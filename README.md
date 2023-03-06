@@ -1,8 +1,14 @@
 # Chess
 
-![inline frontend](img/inline-frontend.png)
-
 A currently unfinished implementation of chess with an ascii terminal front-end.
+
+<img src="img/inline-frontend.png" alt="drawing" width="400"/>
+
+there's also a work in progress fullscreen mode with cli option `--fullscreen`
+
+<img src="img/fullscreen-frontend.png" alt="drawing" width="400"/>
+
+currently windows only
 
 ---
 > MIT License

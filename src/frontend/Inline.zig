@@ -16,18 +16,22 @@ const Frontend = @import("Frontend.zig");
 /// characters high the rendering area is
 const render_height = 20;
 /// characters wide the rendering area is
-const render_width = 64;
+const render_width = 128;
 const file_line = "#dgry   a b c d e f g h \n";
 
 frontend: Frontend,
 
 /// runs the inline frontend
 pub fn run(this: *@This(), writer: *zcon.Writer) !void {
+    writer.put("\n#wht ============= Hello Chess =============\n#dgry /exit to exit, /help for more commands#prv#prv\n");
+    writer.indent(1);
+
     primeBuffer(writer);
     writer.saveCursor();
 
     while (true) {
         writer.restoreCursor();
+        writer.put("\n");
         try this.renderBoard(writer);
 
         // status line
