@@ -23,7 +23,7 @@ const Notation = @This();
 class: Class = .pawn,
 source_file: ?i8 = null,
 source_rank: ?i8 = null,
-destination: Coordinate = Coordinate.from_string("a1"),
+destination: Coordinate = Coordinate.fromString("a1"),
 promote_to: ?Class = null,
 expect_capture: bool = false,
 castle_kingside: ?bool = null,
@@ -69,19 +69,19 @@ pub fn parse(move_notation: []const u8) ?Notation {
 
     // disambiguation
     if (move.len >= 3 and move[0] != 'x' and (move[1] == 'x' or
-        Coordinate.is_file(move[1]) or
-        (Coordinate.is_rank(move[1]) and Coordinate.is_file(move[2]))))
+        Coordinate.isFile(move[1]) or
+        (Coordinate.isRank(move[1]) and Coordinate.isFile(move[2]))))
     {
         switch (move[0]) {
-            'a'...'h' => parsed.source_file = Coordinate.file_from_char(move[0]),
-            '1'...'8' => parsed.source_rank = Coordinate.rank_from_char(move[0]),
+            'a'...'h' => parsed.source_file = Coordinate.fileFromChar(move[0]),
+            '1'...'8' => parsed.source_rank = Coordinate.rankFromChar(move[0]),
             else => return null,
         }
         move = move[1..];
-        if (Coordinate.is_rank(move[0])) {
+        if (Coordinate.isRank(move[0])) {
             if (parsed.source_rank != null)
                 return null;
-            parsed.source_rank = Coordinate.rank_from_char(move[0]);
+            parsed.source_rank = Coordinate.rankFromChar(move[0]);
             move = move[1..];
         }
     }
@@ -92,9 +92,9 @@ pub fn parse(move_notation: []const u8) ?Notation {
     }
 
     if (move.len < 2) return null;
-    if (!Coordinate.is_file(move[0])) return null;
-    if (!Coordinate.is_rank(move[1])) return null;
-    parsed.destination = Coordinate.from_string(move[0..2]);
+    if (!Coordinate.isFile(move[0])) return null;
+    if (!Coordinate.isRank(move[1])) return null;
+    parsed.destination = Coordinate.fromString(move[0..2]);
     move = move[2..];
 
     // promotion

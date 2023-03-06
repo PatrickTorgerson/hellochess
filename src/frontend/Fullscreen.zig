@@ -69,7 +69,7 @@ pub fn drawBoard(this: @This(), writer: *zcon.Writer) !void {
                 "{s}",
                 .{ascii.empty},
             );
-            writer.fmt("{s}", .{pos.to_String()});
+            writer.fmt("{s}", .{pos.toString()});
 
             if (this.frontend.board.at(pos)) |piece| {
                 writer.setForeground(

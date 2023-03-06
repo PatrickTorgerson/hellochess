@@ -45,7 +45,7 @@ pub fn prompt(this: *Frontend, writer: *zcon.Writer) !bool {
         const should_break = this.doCommands(input);
         if (should_break) return true;
     } else {
-        const result = this.board.submit_move(this.turn_affiliation, input);
+        const result = this.board.submitMove(this.turn_affiliation, input);
         this.status = this.statusFromMoveResult(result, input);
         if (Frontend.wasSuccessfulMove(result)) {
             this.turn_affiliation = this.turn_affiliation.opponent();
@@ -92,7 +92,7 @@ pub fn doCommands(this: *Frontend, input: []const u8) bool {
         this.turn_affiliation = .white;
         this.status = "yes sir";
     } else if (std.mem.eql(u8, command, "/clear")) {
-        this.board = chess.Board.init_empty();
+        this.board = chess.Board.initEmpty();
         this.turn_affiliation = .white;
         this.status = "gotcha";
     } else if (std.mem.eql(u8, command, "/spawn-white")) {
@@ -227,7 +227,7 @@ fn spawnPiece(this: *Frontend, affiliation: chess.Piece.Affiliation, expr: []con
         i += 1;
     if (expr.len != i + 2)
         return false;
-    const coord = chess.Coordinate.from_string(expr[i .. i + 2]);
+    const coord = chess.Coordinate.fromString(expr[i .. i + 2]);
     this.board.spawn(chess.Piece.init(class, affiliation), coord);
     return true;
 }

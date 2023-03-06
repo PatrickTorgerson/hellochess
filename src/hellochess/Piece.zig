@@ -31,12 +31,12 @@ pub const Affiliation = enum(u8) {
         };
     }
     /// return the reverse of direction pawns move, -1 or +1
-    pub fn reverse_direction(affiliation_: Affiliation) i8 {
+    pub fn reverseDirection(affiliation_: Affiliation) i8 {
         return -affiliation_.direction();
     }
 
     /// return the rank pawns get pushed to when moving two squares
-    pub fn double_push_rank(affiliation_: Affiliation) i8 {
+    pub fn doublePushRank(affiliation_: Affiliation) i8 {
         return switch (affiliation_) {
             .white => 3, // 4
             .black => 4, // 5  zero based indecies am I right
@@ -44,7 +44,7 @@ pub const Affiliation = enum(u8) {
     }
 
     /// return the second rank
-    pub fn second_rank(affiliation_: Affiliation) i8 {
+    pub fn secondRank(affiliation_: Affiliation) i8 {
         return switch (affiliation_) {
             .white => 1, // 2
             .black => 6, // 7  zero based indecies am I right
@@ -52,7 +52,7 @@ pub const Affiliation = enum(u8) {
     }
 
     /// return the back rank
-    pub fn back_rank(affiliation_: Affiliation) i8 {
+    pub fn backRank(affiliation_: Affiliation) i8 {
         return switch (affiliation_) {
             .white => 0, // 1
             .black => 7, // 8  zero based indecies am I right

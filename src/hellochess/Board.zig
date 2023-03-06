@@ -55,17 +55,17 @@ const starting_position: [64]Square = blk_starting_position: {
     var file = 0;
     while (file < 8) : (file += 1) {
         // back rank
-        squares[Coordinate.init(file, 0).to_1d()] = back_rank.white(file);
-        squares[Coordinate.init(file, 7).to_1d()] = back_rank.black(file);
+        squares[Coordinate.init(file, 0).to1d()] = back_rank.white(file);
+        squares[Coordinate.init(file, 7).to1d()] = back_rank.black(file);
         // pawns
-        squares[Coordinate.init(file, 1).to_1d()] = white_pawn;
-        squares[Coordinate.init(file, 6).to_1d()] = black_pawn;
+        squares[Coordinate.init(file, 1).to1d()] = white_pawn;
+        squares[Coordinate.init(file, 6).to1d()] = black_pawn;
     }
     break :blk_starting_position squares;
 };
 
 /// create an empty board
-pub fn init_empty() Board {
+pub fn initEmpty() Board {
     return .{
         .squares = [1]Square{Square.empty()} ** 64,
     };
@@ -80,27 +80,27 @@ pub fn init() Board {
 
 /// return piece at coord, null if no piece
 pub fn at(board: Board, pos: Coordinate) ?Piece {
-    return board.squares[pos.to_1d()].piece();
+    return board.squares[pos.to1d()].piece();
 }
 
 /// spawn piece at given coord
 pub fn spawn(board: *Board, piece: Piece, pos: Coordinate) void {
-    board.squares[pos.to_1d()] = Square.init(piece);
+    board.squares[pos.to1d()] = Square.init(piece);
 }
 
 /// moves a pices to a different square, does no validation
-pub fn make_move(board: *Board, move: Move) MoveResult {
+pub fn makeMove(board: *Board, move: Move) MoveResult {
     if (board.at(move.location)) |piece| {
         std.debug.assert(piece.bits == move.piece.bits);
-        board.squares[move.location.to_1d()] = Square.empty();
-        board.squares[move.destination.to_1d()] = Square.init(move.piece);
+        board.squares[move.location.to1d()] = Square.empty();
+        board.squares[move.destination.to1d()] = Square.init(move.piece);
         return .ok;
     } else return .no_such_piece;
 }
 
 /// submit move, move to be made pending validation
 /// uses standard chess notation (https://en.wikipedia.org/wiki/Algebraic_notation_(chess))
-pub fn submit_move(board: *Board, affiliation: Affiliation, move_notation: []const u8) MoveResult {
+pub fn submitMove(board: *Board, affiliation: Affiliation, move_notation: []const u8) MoveResult {
     const move = Notation.parse(move_notation) orelse return .bad_notation;
 
     if (board.at(move.destination)) |dest_piece| {
@@ -124,9 +124,9 @@ pub fn submit_move(board: *Board, affiliation: Affiliation, move_notation: []con
 
     // TODO: checks and mates
 
-    return board.make_move(.{
+    return board.makeMove(.{
         .piece = Piece.init(move.class, affiliation),
-        .location = Coordinate.from_1d(results[0]),
+        .location = Coordinate.from1d(results[0]),
         .destination = move.destination,
     });
 }
@@ -187,7 +187,7 @@ pub fn query(board: Board, buffer: *[32]usize, query_expr: Query) []const usize 
     if (query_expr.target_coord) |coord| {
         var i: usize = 0;
         while (i < count) {
-            if (!board.has_visability(buffer[i], coord.to_1d(), query_expr.attacking orelse false)) {
+            if (!board.hasVisability(buffer[i], coord.to1d(), query_expr.attacking orelse false)) {
                 // swap and pop delete
                 buffer[i] = buffer[count - 1];
                 count -= 1;
@@ -199,7 +199,7 @@ pub fn query(board: Board, buffer: *[32]usize, query_expr: Query) []const usize 
     if (query_expr.source_file) |file| {
         var i: usize = 0;
         while (i < count) {
-            if (Coordinate.from_1d(buffer[i]).file != file) {
+            if (Coordinate.from1d(buffer[i]).file != file) {
                 // swap and pop delete
                 buffer[i] = buffer[count - 1];
                 count -= 1;
@@ -211,7 +211,7 @@ pub fn query(board: Board, buffer: *[32]usize, query_expr: Query) []const usize 
     if (query_expr.source_rank) |rank| {
         var i: usize = 0;
         while (i < count) {
-            if (Coordinate.from_1d(buffer[i]).rank != rank) {
+            if (Coordinate.from1d(buffer[i]).rank != rank) {
                 // swap and pop delete
                 buffer[i] = buffer[count - 1];
                 count -= 1;
@@ -226,7 +226,7 @@ pub fn query(board: Board, buffer: *[32]usize, query_expr: Query) []const usize 
 /// does not consider checks
 /// can_capture ensures that the source piece can capture on dest, important for pawns
 /// takes source and dest as 1d coordinates
-fn has_visability(board: Board, source: usize, dest: usize, attacking: bool) bool {
+fn hasVisability(board: Board, source: usize, dest: usize, attacking: bool) bool {
     std.debug.assert(source < board.squares.len);
     std.debug.assert(dest < board.squares.len);
     if (dest == source)
@@ -234,8 +234,8 @@ fn has_visability(board: Board, source: usize, dest: usize, attacking: bool) boo
     if (board.squares[source].piece()) |piece| {
         const class = piece.class();
         const affiliation = piece.affiliation();
-        const source2d = Coordinate.from_1d(source);
-        const dest2d = Coordinate.from_1d(dest);
+        const source2d = Coordinate.from1d(source);
+        const dest2d = Coordinate.from1d(dest);
         switch (class) {
             .pawn => {
                 // TODO: en passant
@@ -244,7 +244,7 @@ fn has_visability(board: Board, source: usize, dest: usize, attacking: bool) boo
                         (dest2d.file == source2d.file + 1 or dest2d.file == source2d.file + 1);
                 } else {
                     // double push
-                    if (dest2d.rank == affiliation.double_push_rank() and source2d.rank == affiliation.second_rank()) {
+                    if (dest2d.rank == affiliation.doublePushRank() and source2d.rank == affiliation.secondRank()) {
                         return dest2d.file == source2d.file and
                             board.at(source2d.offsetted(0, affiliation.direction())) == null and
                             board.at(dest2d) == null;
@@ -268,12 +268,12 @@ fn has_visability(board: Board, source: usize, dest: usize, attacking: bool) boo
                 const file_diff = dest2d.file - source2d.file;
                 if (abs(rank_diff) != abs(file_diff))
                     return false;
-                return board.ensure_empty(source2d, dest2d);
+                return board.ensureEmpty(source2d, dest2d);
             },
             .rook => {
                 if (dest2d.rank != source2d.rank and dest2d.file != source2d.file)
                     return false;
-                return board.ensure_empty(source2d, dest2d);
+                return board.ensureEmpty(source2d, dest2d);
             },
             .queen => {
                 const rank_diff = dest2d.rank - source2d.rank;
@@ -281,7 +281,7 @@ fn has_visability(board: Board, source: usize, dest: usize, attacking: bool) boo
                 if (dest2d.rank != source2d.rank and dest2d.file != source2d.file and
                     abs(rank_diff) != abs(file_diff))
                     return false;
-                return board.ensure_empty(source2d, dest2d);
+                return board.ensureEmpty(source2d, dest2d);
             },
             .king => {
                 if (dest2d.file > source2d.file + 1 or
@@ -298,7 +298,7 @@ fn has_visability(board: Board, source: usize, dest: usize, attacking: bool) boo
 }
 
 /// ensures all squares between source and dest are empty
-fn ensure_empty(board: Board, source: Coordinate, dest: Coordinate) bool {
+fn ensureEmpty(board: Board, source: Coordinate, dest: Coordinate) bool {
     const rank_diff = dest.rank - source.rank;
     const file_diff = dest.file - source.file;
     const length = std.math.sqrt(@intCast(u8, rank_diff * rank_diff + file_diff * file_diff));
@@ -307,8 +307,8 @@ fn ensure_empty(board: Board, source: Coordinate, dest: Coordinate) bool {
     var coord = source;
     coord.rank += rank_delta;
     coord.file += file_delta;
-    while (coord.valid() and coord.to_1d() != dest.to_1d()) {
-        if (board.squares[coord.to_1d()].piece()) |_|
+    while (coord.valid() and coord.to1d() != dest.to1d()) {
+        if (board.squares[coord.to1d()].piece()) |_|
             return false;
         coord.rank += rank_delta;
         coord.file += file_delta;

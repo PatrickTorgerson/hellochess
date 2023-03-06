@@ -29,18 +29,18 @@ pub const Coordinate = struct {
         "h1" ++ "h2" ++ "h3" ++ "h4" ++ "h5" ++ "h6" ++ "h7" ++ "h8";
 
     /// returns the string representation of a square eg: "e4"
-    pub fn to_String(pos: Coordinate) []const u8 {
+    pub fn toString(pos: Coordinate) []const u8 {
         std.debug.assert(pos.valid());
-        const index = pos.to_1d();
+        const index = pos.to1d();
         return pos_strs[index * 2 .. index * 2 + 2];
     }
 
     /// converts string representation of a square to rank and file position
-    pub fn from_string(str: []const u8) Coordinate {
+    pub fn fromString(str: []const u8) Coordinate {
         std.debug.assert(str.len == 2);
         return Coordinate.init(
-            Coordinate.file_from_char(str[0]),
-            Coordinate.rank_from_char(str[1]),
+            Coordinate.fileFromChar(str[0]),
+            Coordinate.rankFromChar(str[1]),
         );
     }
 
@@ -64,13 +64,13 @@ pub const Coordinate = struct {
     /// converts a 1d index to a 2d rank and file
     /// used for indexing into an array
     /// 0 = a1, 1 = a2 ...
-    pub fn from_1d(d: usize) Coordinate {
+    pub fn from1d(d: usize) Coordinate {
         return Coordinate.init(@intCast(i8, @divFloor(d, 8)), @intCast(i8, d % 8));
     }
 
     /// converts a 2d rank and file to a 1d index
     /// 0 = a1, 1 = a2 ...
-    pub fn to_1d(pos: Coordinate) usize {
+    pub fn to1d(pos: Coordinate) usize {
         std.debug.assert(pos.valid());
         return @intCast(usize, pos.file * 8 + pos.rank);
     }
@@ -81,32 +81,32 @@ pub const Coordinate = struct {
     }
 
     /// return file from standard chess file letter ascii
-    pub fn file_from_char(char: u8) i8 {
-        std.debug.assert(is_file(char));
+    pub fn fileFromChar(char: u8) i8 {
+        std.debug.assert(isFile(char));
         return @intCast(i8, char) - 'a';
     }
 
     /// return rank from standard chess rank number ascii
-    pub fn rank_from_char(char: u8) i8 {
-        std.debug.assert(is_rank(char));
+    pub fn rankFromChar(char: u8) i8 {
+        std.debug.assert(isRank(char));
         return @intCast(i8, char) - '1';
     }
 
-    pub fn is_rank(char: u8) bool {
+    pub fn isRank(char: u8) bool {
         return char >= '1' and char <= '8';
     }
 
-    pub fn is_file(char: u8) bool {
+    pub fn isFile(char: u8) bool {
         return char >= 'a' and char <= 'h';
     }
 
     test "2d 1d mapping" {
-        try std.testing.expectEqual(@as(usize, 5), Coordinate.from_1d(5).to_1d());
+        try std.testing.expectEqual(@as(usize, 5), Coordinate.from1d(5).to_1d());
         const pos = Coordinate.init(4, 7);
-        try std.testing.expectEqual(pos, Coordinate.from_1d(pos.to_1d()));
-        try std.testing.expectEqual(@as(usize, 0), Coordinate.init(0, 0).to_1d());
-        try std.testing.expectEqual(@as(usize, 35), Coordinate.init(4, 3).to_1d());
-        try std.testing.expectEqual(Coordinate.init(4, 3), Coordinate.from_1d(35));
+        try std.testing.expectEqual(pos, Coordinate.from1d(pos.to1d()));
+        try std.testing.expectEqual(@as(usize, 0), Coordinate.init(0, 0).to1d());
+        try std.testing.expectEqual(@as(usize, 35), Coordinate.init(4, 3).to1d());
+        try std.testing.expectEqual(Coordinate.init(4, 3), Coordinate.from1d(35));
     }
 };
 
