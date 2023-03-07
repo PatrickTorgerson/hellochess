@@ -103,6 +103,8 @@ pub fn makeMove(board: *Board, move: Move) MoveResult {
 pub fn submitMove(board: *Board, affiliation: Affiliation, move_notation: []const u8) MoveResult {
     const move = Notation.parse(move_notation) orelse return .bad_notation;
 
+    if (move.castle_kingside) |castle_kingside| {}
+
     if (board.at(move.destination)) |dest_piece| {
         if (dest_piece.affiliation() == affiliation)
             return .blocked;

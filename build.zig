@@ -22,6 +22,10 @@ pub fn build(b: *std.build.Builder) void {
     exe.setTarget(target);
     exe.setBuildMode(mode);
     zcon.link(b, exe);
+    exe.addPackage(.{
+        .name = "network",
+        .source_file = .{ .path = "network.zig" },
+    });
     exe.install();
 
     const run_cmd = exe.run();
