@@ -8,6 +8,8 @@ const std = @import("std");
 
 pub const Piece = @This();
 
+const Coordinate = @import("types.zig").Coordinate;
+
 ///-----------------------------------------------------------------------------
 ///  A piece's affiliation, white or black
 ///
@@ -56,6 +58,22 @@ pub const Affiliation = enum(u8) {
         return switch (affiliation_) {
             .white => 0, // 1
             .black => 7, // 8  zero based indecies am I right
+        };
+    }
+
+    /// return starting coord of the rook on file a
+    pub fn aRookCoord(affiliation_: Affiliation) Coordinate {
+        return switch (affiliation_) {
+            .white => Coordinate.fromString("a1"),
+            .black => Coordinate.fromString("a8"),
+        };
+    }
+
+    /// return starting coord of the rook on file h
+    pub fn hRookCoord(affiliation_: Affiliation) Coordinate {
+        return switch (affiliation_) {
+            .white => Coordinate.fromString("h1"),
+            .black => Coordinate.fromString("h8"),
         };
     }
 };

@@ -24,7 +24,7 @@ pub fn build(b: *std.build.Builder) void {
     zcon.link(b, exe);
     exe.addPackage(.{
         .name = "network",
-        .source_file = .{ .path = "network.zig" },
+        .source = .{ .path = "src/zig-network/network.zig" },
     });
     exe.install();
 
