@@ -134,8 +134,10 @@ pub fn makeMove(board: *Board, move: Move) MoveResult {
         });
         if (checkers.len > 0) {
             opponent_state.in_check = true;
-            // TODO: look for mate
-            return .ok_check;
+            return if (board.isMate(piece.affiliation().opponent()))
+                .ok_mate
+            else
+                .ok_check;
         }
         return .ok;
     } else return .no_such_piece;
@@ -380,22 +382,113 @@ fn hasVisability(board: Board, source: usize, dest: usize, attacking: bool) bool
 
 /// ensures all squares between source and dest are empty
 fn ensureEmpty(board: Board, source: Coordinate, dest: Coordinate) bool {
-    const rank_diff = dest.rank - source.rank;
-    const file_diff = dest.file - source.file;
-    const length = std.math.sqrt(@intCast(u8, rank_diff * rank_diff + file_diff * file_diff));
-    const rank_delta = std.math.clamp(div(rank_diff, length), -1, 1);
-    const file_delta = std.math.clamp(div(file_diff, length), -1, 1);
-    var coord = source;
-    coord.rank += rank_delta;
-    coord.file += file_delta;
-    while (coord.valid() and coord.to1d() != dest.to1d()) {
-        if (board.squares[coord.to1d()].piece()) |_|
+    var iter = DirectionalIterator.init(source, dest);
+    while (iter.next()) |coord| {
+        if (board.at(coord)) |_|
             return false;
-        coord.rank += rank_delta;
-        coord.file += file_delta;
     }
     return true;
 }
+
+/// determines if affiliated king is in check and cannot
+/// get out of check within a single move
+fn isMate(board: *Board, affiliation: Affiliation) bool {
+    const state = board.getMetaState(affiliation);
+    if (!state.in_check)
+        return false;
+
+    var buffer: [32]usize = undefined;
+
+    // can the king move to safety
+    var coord = state.king_coord.offsetted(-1, -1);
+    while (coord.file <= state.king_coord.file + 1) {
+        while (coord.rank <= state.king_coord.rank + 1) {
+            coord.file = std.math.clamp(coord.file, 0, 7);
+            coord.rank = std.math.clamp(coord.rank, 0, 7);
+            // empty or enemy piece
+            if (board.at(coord) == null or board.at(coord).?.affiliation() == affiliation.opponent()) {
+                const attackers = board.query(&buffer, .{
+                    .affiliation = affiliation.opponent(),
+                    .attacking = true,
+                    .target_coord = coord,
+                });
+                if (attackers.len == 0)
+                    return false;
+            }
+            coord.rank += 1;
+        }
+        coord.rank = state.king_coord.rank - 1;
+        coord.file += 1;
+    }
+
+    const checkers = board.query(&buffer, .{
+        .affiliation = affiliation.opponent(),
+        .attacking = true,
+        .target_coord = state.king_coord,
+    });
+
+    // double checks can't be blocked or captured
+    if (checkers.len > 1)
+        return true;
+
+    // can we capture the checking piece
+    const capturing = board.query(&buffer, .{
+        .affiliation = affiliation,
+        .attacking = true,
+        .target_coord = Coordinate.from1d(checkers[0]),
+    });
+    if (capturing.len > 0)
+        return false;
+
+    // can we block the check
+    switch (board.at(Coordinate.from1d(checkers[0])).?.class()) {
+        .pawn,
+        .knight,
+        .king,
+        => return true,
+        else => {},
+    }
+    var iter = DirectionalIterator.init(state.king_coord, Coordinate.from1d(checkers[0]));
+    while (iter.next()) |c| {
+        const blockers = board.query(&buffer, .{
+            .affiliation = affiliation,
+            .target_coord = c,
+        });
+        if (blockers.len > 0)
+            return false;
+    }
+
+    return true;
+}
+
+/// iterates over squares between two coords exclusive
+const DirectionalIterator = struct {
+    source: Coordinate,
+    dest: Coordinate,
+    at: Coordinate,
+    delta: Coordinate,
+
+    pub fn init(source: Coordinate, dest: Coordinate) DirectionalIterator {
+        const rank_diff = dest.rank - source.rank;
+        const file_diff = dest.file - source.file;
+        const length = std.math.sqrt(@intCast(u8, rank_diff * rank_diff + file_diff * file_diff));
+        const rank_delta = std.math.clamp(div(rank_diff, length), -1, 1);
+        const file_delta = std.math.clamp(div(file_diff, length), -1, 1);
+        return .{
+            .source = source,
+            .dest = dest,
+            .at = source,
+            .delta = .{ .rank = rank_delta, .file = file_delta },
+        };
+    }
+
+    pub fn next(iter: *DirectionalIterator) ?Coordinate {
+        iter.at = iter.at.offsetted(iter.delta.file, iter.delta.rank);
+        if (!iter.at.valid()) return null;
+        if (iter.at.to1d() == iter.dest.to1d()) return null;
+        return iter.at;
+    }
+};
 
 /// divide n / d rounding away from zero
 fn div(n: i8, d: i8) i8 {
