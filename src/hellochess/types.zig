@@ -170,6 +170,7 @@ pub const MoveResult = enum {
     ok_stalemate,
     ok_repitition,
     ok_insufficient_material,
+    ok_en_passant,
 
     bad_notation,
     bad_disambiguation,

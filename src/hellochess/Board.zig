@@ -24,6 +24,7 @@ const MetaState = struct {
     h_rook_has_moved: bool = false,
     a_rook_has_moved: bool = false,
     king_coord: Coordinate = Coordinate.from1d(0),
+    double_push_file: ?i8 = null,
 };
 
 /// the 64 squares of a chess board laid out a rank 1 to 8 file a to h
@@ -144,6 +145,7 @@ pub fn spawn(board: *Board, piece: Piece, pos: Coordinate) MoveResult {
 /// returns null when move result is ok but potentially a check or mate
 pub fn forceMove(board: *Board, move: Move) ?MoveResult {
     var state = board.getMetaState(move.piece.affiliation());
+    state.double_push_file = null;
 
     // castling
     if (move.castle_kingside) |kingside| {
@@ -196,6 +198,32 @@ pub fn forceMove(board: *Board, move: Move) ?MoveResult {
                 }
                 if (move.location.?.to1d() == piece.affiliation().aRookCoord().to1d()) {
                     state.a_rook_has_moved = true;
+                }
+            } else if (move.piece.class() == .pawn and
+                move.location.?.rank == piece.affiliation().secondRank() and
+                move.destination.rank == piece.affiliation().doublePushRank() and
+                move.location.?.file == move.destination.file)
+            {
+                // keep track of last double pawn push for en passant validation
+                state.double_push_file = move.destination.file;
+            } else if (move.piece.class() == .pawn and
+                move.location.?.rank == piece.affiliation().enPassantRank() and
+                abs(move.destination.file - move.location.?.file) == 1 and
+                board.at(move.destination) == null)
+            {
+                // en passant
+                const coord = Coordinate.init(move.destination.file, move.destination.rank - piece.affiliation().direction());
+                if (board.at(coord)) |enpassant_target| {
+                    const opponent_state = board.getMetaState(piece.affiliation().opponent());
+                    if (enpassant_target.class() == .pawn and
+                        enpassant_target.affiliation() == piece.affiliation().opponent() and
+                        opponent_state.double_push_file != null and
+                        opponent_state.double_push_file.? == move.destination.file)
+                    {
+                        board.squares[coord.to1d()] = Square.empty();
+                        board.squares[move.destination.to1d()] = Square.init(move.piece);
+                        return .ok_en_passant;
+                    }
                 }
             }
         } else return .no_such_piece;
@@ -444,7 +472,7 @@ pub fn query(board: Board, buffer: *[32]usize, query_expr: Query) []const usize 
 /// does not consider checks
 /// can_capture ensures that the source piece can capture on dest, important for pawns
 /// takes source and dest as 1d coordinates
-fn hasVisability(board: Board, source: usize, dest: usize, attacking: bool) bool {
+fn hasVisability(board: *Board, source: usize, dest: usize, attacking: bool) bool {
     std.debug.assert(source < board.squares.len);
     std.debug.assert(dest < board.squares.len);
     if (dest == source)
@@ -456,7 +484,6 @@ fn hasVisability(board: Board, source: usize, dest: usize, attacking: bool) bool
         const dest2d = Coordinate.from1d(dest);
         switch (class) {
             .pawn => {
-                // TODO: en passant
                 if (attacking) {
                     return (dest2d.rank == source2d.rank + affiliation.direction()) and
                         (dest2d.file == source2d.file + 1 or dest2d.file == source2d.file + 1);
@@ -471,8 +498,19 @@ fn hasVisability(board: Board, source: usize, dest: usize, attacking: bool) bool
                     if (dest2d.file == source2d.file and dest2d.rank == source2d.rank + affiliation.direction())
                         return board.at(dest2d) == null;
                     // captures
-                    if ((dest2d.file == source2d.file + 1 or dest2d.file == source2d.file - 1) and dest2d.rank == source2d.rank + affiliation.direction())
-                        return board.at(dest2d) != null and board.at(dest2d).?.affiliation() == affiliation.opponent();
+                    if ((dest2d.file == source2d.file + 1 or dest2d.file == source2d.file - 1) and dest2d.rank == source2d.rank + affiliation.direction()) {
+                        if (board.at(dest2d) == null) {
+                            // en passant
+                            const coord = Coordinate.init(dest2d.file, dest2d.rank - affiliation.direction());
+                            if (board.at(coord)) |enpassant_target| {
+                                const opponent_state = board.getMetaState(affiliation.opponent());
+                                return (enpassant_target.class() == .pawn and
+                                    enpassant_target.affiliation() == affiliation.opponent() and
+                                    opponent_state.double_push_file != null and
+                                    opponent_state.double_push_file.? == dest2d.file);
+                            }
+                        } else return board.at(dest2d) != null and board.at(dest2d).?.affiliation() == affiliation.opponent();
+                    }
                     return false;
                 }
             },
@@ -579,6 +617,7 @@ fn isMate(board: *Board, affiliation: Affiliation) bool {
         .affiliation = affiliation,
         .attacking = true,
         .target_coord = Coordinate.from1d(checkers[0]),
+        // TODO: exclude king if checking piece is defended
     });
     if (capturing.len > 0)
         return false;

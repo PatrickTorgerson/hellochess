@@ -53,6 +53,14 @@ pub const Affiliation = enum(u8) {
         };
     }
 
+    /// return rank an allied pawn can en passant from
+    pub fn enPassantRank(affiliation_: Affiliation) i8 {
+        return switch (affiliation_) {
+            .white => 4, // 5
+            .black => 3, // 4  zero based indecies am I right
+        };
+    }
+
     /// return the back rank
     pub fn backRank(affiliation_: Affiliation) i8 {
         return switch (affiliation_) {

@@ -208,6 +208,7 @@ fn statusForCmdHelp(cmd: []const u8, include_dev_commands: bool) []const u8 {
 fn statusFromMoveResult(this: Frontend, move_result: chess.MoveResult, input: []const u8) []const u8 {
     return switch (move_result) {
         .ok => "#grn ok",
+        .ok_en_passant => "#grn En Passant!",
         .ok_check => "#grn check!",
         .ok_mate => this.winStatus(),
         .ok_stalemate => "#wht draw",
@@ -256,6 +257,7 @@ fn winStatus(this: Frontend) []const u8 {
 fn wasSuccessfulMove(move_result: chess.MoveResult) bool {
     return switch (move_result) {
         .ok,
+        .ok_en_passant,
         .ok_check,
         .ok_mate,
         .ok_stalemate,
