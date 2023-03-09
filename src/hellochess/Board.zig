@@ -144,6 +144,8 @@ pub fn spawn(board: *Board, piece: Piece, pos: Coordinate) MoveResult {
 /// returns null when move result is ok but potentially a check or mate
 pub fn forceMove(board: *Board, move: Move) ?MoveResult {
     var state = board.getMetaState(move.piece.affiliation());
+
+    // castling
     if (move.castle_kingside) |kingside| {
         std.debug.assert(move.piece.class() == .king); // piece must be king when castling
         const king_delta: i8 = if (kingside) 2 else -2;
@@ -176,47 +178,55 @@ pub fn forceMove(board: *Board, move: Move) ?MoveResult {
         else
             state.a_rook_has_moved = true;
         return null;
-    } else if (move.location == null) {
-        // spawn piece
-        if (move.destination.to1d() == state.king_coord.to1d())
-            return .no_visibility;
-        if (move.destination.to1d() == board.getMetaState(move.piece.affiliation().opponent()).king_coord.to1d())
-            return .no_visibility;
-        board.squares[move.destination.to1d()] = Square.init(move.piece);
-        if (move.piece.class() == .king) {
-            // there can only be one
-            board.squares[state.king_coord.to1d()] = Square.empty();
-            state.king_coord = move.destination;
-            if (move.destination.to1d() == move.piece.affiliation().kingCoord().to1d())
-                state.king_has_moved = false
-            else
-                state.king_has_moved = true;
-        } else if (move.piece.class() == .rook) {
-            // spawning rooks in their standard starting pos
-            // counts as them no moving, usefull for testing castling
-            if (move.destination.to1d() == move.piece.affiliation().aRookCoord().to1d())
-                state.a_rook_has_moved = false
-            else if (move.destination.to1d() == move.piece.affiliation().hRookCoord().to1d())
-                state.h_rook_has_moved = false;
-        }
-        return null;
-    } else if (board.at(move.location.?)) |piece| {
-        std.debug.assert(piece.bits == move.piece.bits);
-        board.squares[move.location.?.to1d()] = Square.empty();
-        board.squares[move.destination.to1d()] = Square.init(move.piece);
-        if (piece.class() == .king) {
-            state.king_coord = move.destination;
-            state.king_has_moved = true;
-        } else if (piece.class() == .rook) {
-            if (move.location.?.to1d() == piece.affiliation().hRookCoord().to1d() and !state.h_rook_has_moved) {
-                state.h_rook_has_moved = true;
+    }
+
+    // no capturing kings
+    if (move.destination.to1d() == state.king_coord.to1d())
+        return .no_visibility;
+    if (move.destination.to1d() == board.getMetaState(move.piece.affiliation().opponent()).king_coord.to1d())
+        return .no_visibility;
+
+    if (move.location != null) {
+        if (board.at(move.location.?)) |piece| {
+            std.debug.assert(piece.bits == move.piece.bits);
+            board.squares[move.location.?.to1d()] = Square.empty();
+            if (piece.class() == .rook) {
+                if (move.location.?.to1d() == piece.affiliation().hRookCoord().to1d()) {
+                    state.h_rook_has_moved = true;
+                }
+                if (move.location.?.to1d() == piece.affiliation().aRookCoord().to1d()) {
+                    state.a_rook_has_moved = true;
+                }
             }
-            if (move.location.?.to1d() == piece.affiliation().aRookCoord().to1d() and !state.a_rook_has_moved) {
-                state.a_rook_has_moved = true;
-            }
-        }
-        return null;
-    } else return .no_such_piece;
+        } else return .no_such_piece;
+    }
+
+    board.squares[move.destination.to1d()] = Square.init(move.piece);
+
+    if (move.piece.class() == .pawn and move.destination.rank == move.piece.affiliation().opponent().backRank()) {
+        // pawn promotion
+        const promotion_class = switch (move.promote_to) {
+            .pawn, .king => .queen,
+            else => |c| c,
+        };
+        board.squares[move.destination.to1d()] = Square.init(Piece.init(promotion_class, move.piece.affiliation()));
+    } else if (move.piece.class() == .king) {
+        // there can only be one
+        board.squares[state.king_coord.to1d()] = Square.empty();
+        state.king_coord = move.destination;
+        state.king_has_moved = true;
+        if (move.location == null and move.destination.to1d() == move.piece.affiliation().kingCoord().to1d())
+            state.king_has_moved = false; // spawn king to starting square
+    } else if (move.location == null and move.piece.class() == .rook) {
+        // spawning rooks in their standard starting pos
+        // counts as them no moving, usefull for testing castling
+        if (move.destination.to1d() == move.piece.affiliation().aRookCoord().to1d())
+            state.a_rook_has_moved = false
+        else if (move.destination.to1d() == move.piece.affiliation().hRookCoord().to1d())
+            state.h_rook_has_moved = false;
+    }
+
+    return null;
 }
 
 /// moves a pices to a different square, does no validation
@@ -267,6 +277,7 @@ pub fn submitMove(board: *Board, affiliation: Affiliation, move_notation: []cons
         .piece = Piece.init(notation.class, affiliation),
         .location = Coordinate.from1d(results[0]),
         .destination = notation.destination,
+        .promote_to = notation.promote_to orelse .queen,
     };
 
     var state = board.getMetaState(affiliation);

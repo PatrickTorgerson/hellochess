@@ -154,6 +154,10 @@ pub const Move = struct {
     /// castleing queen or queen, if this is set affiliation
     /// is gathered from piece, other fields are ignored
     castle_kingside: ?bool = null,
+    /// class to promote pawn to, ignored if move does not
+    /// represent a pawn promotion, if move is promotion and
+    /// this is pawn or king, pawn will auto pronote to queen
+    promote_to: Piece.Class = .queen,
 };
 
 ///-----------------------------------------------------------------------------
