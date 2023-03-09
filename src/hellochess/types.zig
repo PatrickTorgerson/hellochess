@@ -148,9 +148,12 @@ pub const Move = struct {
     /// piece to move
     piece: Piece,
     /// where it is
-    location: Coordinate,
+    location: Coordinate = Coordinate.from1d(0),
     /// where it's going
-    destination: Coordinate,
+    destination: Coordinate = Coordinate.from1d(0),
+    /// castleing queen or queen, if this is set affiliation
+    /// is gathered from piece, other fields are ignored
+    castle_kingside: ?bool = null,
 };
 
 ///-----------------------------------------------------------------------------
@@ -172,6 +175,11 @@ pub const MoveResult = enum {
     in_check,
     enters_check,
     blocked,
+
+    castle_in_check,
+    castle_through_check,
+    castle_king_moved,
+    castle_rook_moved,
 };
 
 test "refs" {

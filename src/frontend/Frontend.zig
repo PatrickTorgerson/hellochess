@@ -232,6 +232,10 @@ fn statusFromMoveResult(this: Frontend, move_result: chess.MoveResult, input: []
         .in_check => "#red you are in check",
         .enters_check => "#red you cannot put yourself in check",
         .blocked => "#red there is a piece in your way",
+        .castle_in_check => "#red cannot castle out of check",
+        .castle_through_check => "#red cannot castle through check",
+        .castle_king_moved => "#red you have already moved your king",
+        .castle_rook_moved => "#red that rook has already moved",
     };
 }
 
@@ -262,20 +266,27 @@ fn winStatus(this: Frontend) []const u8 {
 
 fn wasSuccessfulMove(move_result: chess.MoveResult) bool {
     return switch (move_result) {
-        .ok => true,
-        .ok_check => true,
-        .ok_mate => true,
-        .ok_stalemate => true,
-        .ok_repitition => true,
-        .ok_insufficient_material => true,
-        .bad_notation => false,
-        .bad_disambiguation => false,
-        .ambiguous_piece => false,
-        .no_such_piece => false,
-        .no_visibility => false,
-        .in_check => false,
-        .enters_check => false,
-        .blocked => false,
+        .ok,
+        .ok_check,
+        .ok_mate,
+        .ok_stalemate,
+        .ok_repitition,
+        .ok_insufficient_material,
+        => true,
+
+        .castle_in_check,
+        .castle_through_check,
+        .castle_king_moved,
+        .castle_rook_moved,
+        .bad_notation,
+        .bad_disambiguation,
+        .ambiguous_piece,
+        .no_such_piece,
+        .no_visibility,
+        .in_check,
+        .enters_check,
+        .blocked,
+        => return false,
     };
 }
 

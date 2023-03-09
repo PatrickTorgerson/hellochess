@@ -109,7 +109,40 @@ pub fn spawn(board: *Board, piece: Piece, pos: Coordinate) void {
 
 /// moves a pices to a different square, does no validation
 pub fn makeMove(board: *Board, move: Move) MoveResult {
-    if (board.at(move.location)) |piece| {
+    if (move.castle_kingside) |kingside| {
+        std.debug.assert(move.piece.class() == .king); // piece must be king when castling
+        const king_delta: i8 = if (kingside) 2 else -2;
+        const rook_delta: i8 = if (kingside) -2 else 3;
+        const affiliation = move.piece.affiliation();
+        var state = board.getMetaState(affiliation);
+
+        if (state.king_has_moved)
+            return .castle_king_moved;
+        if (kingside and state.h_rook_has_moved)
+            return .castle_rook_moved;
+        if (!kingside and state.a_rook_has_moved)
+            return .castle_rook_moved;
+
+        const rook_source_coord = if (kingside)
+            affiliation.hRookCoord()
+        else
+            affiliation.aRookCoord();
+
+        board.squares[state.king_coord.to1d()] = Square.empty();
+        board.squares[rook_source_coord.to1d()] = Square.empty();
+
+        state.king_coord = state.king_coord.offsetted(king_delta, 0);
+
+        board.squares[state.king_coord.to1d()] = Square.init(move.piece);
+        board.squares[rook_source_coord.offsetted(rook_delta, 0).to1d()] = Square.init(Piece.init(.rook, affiliation));
+
+        state.king_has_moved = true;
+        if (kingside)
+            state.h_rook_has_moved = true
+        else
+            state.a_rook_has_moved = true;
+        return .ok;
+    } else if (board.at(move.location)) |piece| {
         std.debug.assert(piece.bits == move.piece.bits);
         board.squares[move.location.to1d()] = Square.empty();
         board.squares[move.destination.to1d()] = Square.init(move.piece);
@@ -156,7 +189,9 @@ pub fn getMetaState(board: *Board, affiliation: Affiliation) *MetaState {
 pub fn submitMove(board: *Board, affiliation: Affiliation, move_notation: []const u8) MoveResult {
     const notation = Notation.parse(move_notation) orelse return .bad_notation;
 
-    // if (move.castle_kingside) |castle_kingside| {}
+    if (notation.castle_kingside) |castle_kingside| {
+        return board.castle(affiliation, castle_kingside);
+    }
 
     if (board.at(notation.destination)) |dest_piece| {
         if (dest_piece.affiliation() == affiliation)
@@ -206,6 +241,39 @@ pub fn submitMove(board: *Board, affiliation: Affiliation, move_notation: []cons
     state.in_check = false;
 
     return board.makeMove(move);
+}
+
+/// attempt to castle, pending validation
+pub fn castle(board: *Board, affiliation: Affiliation, kingside: bool) MoveResult {
+    const state = board.getMetaState(affiliation);
+    if (state.in_check)
+        return .castle_in_check;
+    if (state.king_has_moved)
+        return .castle_king_moved;
+    if (kingside and state.h_rook_has_moved)
+        return .castle_rook_moved;
+    if (!kingside and state.a_rook_has_moved)
+        return .castle_rook_moved;
+
+    var buffer: [32]usize = undefined;
+    const file_delta: i8 = if (kingside) 3 else -3;
+    var iter = DirectionalIterator.init(state.king_coord, state.king_coord.offsetted(file_delta, 0));
+    while (iter.next()) |coord| {
+        if (board.at(coord) != null)
+            return .blocked;
+        const attackers = board.query(&buffer, .{
+            .affiliation = affiliation.opponent(),
+            .attacking = true,
+            .target_coord = coord,
+        });
+        if (attackers.len > 0)
+            return .castle_through_check;
+    }
+
+    return board.makeMove(.{
+        .piece = Piece.init(.king, affiliation),
+        .castle_kingside = kingside,
+    });
 }
 
 /// options for making querys with Board.query()
