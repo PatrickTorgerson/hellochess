@@ -74,27 +74,42 @@ const starting_position: [64]Square = blk_starting_position: {
     break :blk_starting_position squares;
 };
 
-/// create an empty board
+/// create an empty board, with onlt kings
 pub fn initEmpty() Board {
-    return .{
+    var this = Board{
         .squares = [1]Square{Square.empty()} ** 64,
-        .white_state = .{},
-        .black_state = .{},
+        .white_state = .{
+            .king_coord = Affiliation.white.kingCoord(),
+            .h_rook_has_moved = true,
+            .a_rook_has_moved = true,
+        },
+        .black_state = .{
+            .king_coord = Affiliation.black.kingCoord(),
+            .h_rook_has_moved = true,
+            .a_rook_has_moved = true,
+        },
     };
+    this.squares[Affiliation.white.kingCoord().to1d()] = Square.init(Piece.init(.king, .white));
+    this.squares[Affiliation.black.kingCoord().to1d()] = Square.init(Piece.init(.king, .black));
+    return this;
 }
 
 /// create a board with standard chess starting position
 pub fn init() Board {
     return .{
         .squares = starting_position,
-        .white_state = .{ .king_coord = Coordinate.fromString("e1") },
-        .black_state = .{ .king_coord = Coordinate.fromString("e8") },
+        .white_state = .{ .king_coord = Affiliation.white.kingCoord() },
+        .black_state = .{ .king_coord = Affiliation.black.kingCoord() },
     };
 }
 
 /// return a duplicate of board
 pub fn dupe(board: Board) Board {
-    return board;
+    return .{
+        .squares = board.squares,
+        .white_state = board.white_state,
+        .black_state = board.black_state,
+    };
 }
 
 /// return piece at coord, null if no piece
@@ -102,19 +117,38 @@ pub fn at(board: Board, pos: Coordinate) ?Piece {
     return board.squares[pos.to1d()].piece();
 }
 
-/// spawn piece at given coord
-pub fn spawn(board: *Board, piece: Piece, pos: Coordinate) void {
-    board.squares[pos.to1d()] = Square.init(piece);
+/// spawn piece at given coord pending validation
+pub fn spawn(board: *Board, piece: Piece, pos: Coordinate) MoveResult {
+    const move = Move{
+        .piece = piece,
+        .destination = pos,
+    };
+    var state = board.getMetaState(piece.affiliation());
+    var buffer: [32]usize = undefined;
+    if (state.in_check) {
+        const checkers = board.query(&buffer, .{
+            .affiliation = piece.affiliation().opponent(),
+            .target_coord = state.king_coord,
+            .hypothetical_move = move,
+            .attacking = true,
+        });
+        if (checkers.len > 0)
+            return .in_check
+        else
+            state.in_check = false;
+    }
+    return board.makeMove(move);
 }
 
-/// moves a pices to a different square, does no validation
-pub fn makeMove(board: *Board, move: Move) MoveResult {
+/// makes a move, no validation, no searching for checks or mates
+/// returns null when move result is ok but potentially a check or mate
+pub fn forceMove(board: *Board, move: Move) ?MoveResult {
+    var state = board.getMetaState(move.piece.affiliation());
     if (move.castle_kingside) |kingside| {
         std.debug.assert(move.piece.class() == .king); // piece must be king when castling
         const king_delta: i8 = if (kingside) 2 else -2;
         const rook_delta: i8 = if (kingside) -2 else 3;
         const affiliation = move.piece.affiliation();
-        var state = board.getMetaState(affiliation);
 
         if (state.king_has_moved)
             return .castle_king_moved;
@@ -141,39 +175,56 @@ pub fn makeMove(board: *Board, move: Move) MoveResult {
             state.h_rook_has_moved = true
         else
             state.a_rook_has_moved = true;
-        return .ok;
-    } else if (board.at(move.location)) |piece| {
-        std.debug.assert(piece.bits == move.piece.bits);
-        board.squares[move.location.to1d()] = Square.empty();
+        return null;
+    } else if (move.location == null) {
+        // spawn piece
+        if (move.destination.to1d() == state.king_coord.to1d())
+            return .no_visibility;
+        if (move.destination.to1d() == board.getMetaState(move.piece.affiliation().opponent()).king_coord.to1d())
+            return .no_visibility;
         board.squares[move.destination.to1d()] = Square.init(move.piece);
-        var state = board.getMetaState(piece.affiliation());
+        if (move.piece.class() == .king) {
+            // there can only be one
+            board.squares[state.king_coord.to1d()] = Square.empty();
+            state.king_coord = move.destination;
+            if (move.destination.to1d() == move.piece.affiliation().kingCoord().to1d())
+                state.king_has_moved = false
+            else
+                state.king_has_moved = true;
+        } else if (move.piece.class() == .rook) {
+            // spawning rooks in their standard starting pos
+            // counts as them no moving, usefull for testing castling
+            if (move.destination.to1d() == move.piece.affiliation().aRookCoord().to1d())
+                state.a_rook_has_moved = false
+            else if (move.destination.to1d() == move.piece.affiliation().hRookCoord().to1d())
+                state.h_rook_has_moved = false;
+        }
+        return null;
+    } else if (board.at(move.location.?)) |piece| {
+        std.debug.assert(piece.bits == move.piece.bits);
+        board.squares[move.location.?.to1d()] = Square.empty();
+        board.squares[move.destination.to1d()] = Square.init(move.piece);
         if (piece.class() == .king) {
             state.king_coord = move.destination;
             state.king_has_moved = true;
         } else if (piece.class() == .rook) {
-            if (move.location.to1d() == piece.affiliation().hRookCoord().to1d() and !state.h_rook_has_moved) {
+            if (move.location.?.to1d() == piece.affiliation().hRookCoord().to1d() and !state.h_rook_has_moved) {
                 state.h_rook_has_moved = true;
             }
-            if (move.location.to1d() == piece.affiliation().aRookCoord().to1d() and !state.a_rook_has_moved) {
+            if (move.location.?.to1d() == piece.affiliation().aRookCoord().to1d() and !state.a_rook_has_moved) {
                 state.a_rook_has_moved = true;
             }
         }
-        var opponent_state = board.getMetaState(piece.affiliation().opponent());
-        var buffer: [32]usize = undefined;
-        const checkers = board.query(&buffer, .{
-            .affiliation = piece.affiliation(),
-            .target_coord = opponent_state.king_coord,
-            .attacking = true,
-        });
-        if (checkers.len > 0) {
-            opponent_state.in_check = true;
-            return if (board.isMate(piece.affiliation().opponent()))
-                .ok_mate
-            else
-                .ok_check;
-        }
-        return .ok;
+        return null;
     } else return .no_such_piece;
+}
+
+/// moves a pices to a different square, does no validation
+pub fn makeMove(board: *Board, move: Move) MoveResult {
+    if (board.forceMove(move)) |result|
+        return result
+    else
+        return board.checksAndMates(move.piece.affiliation().opponent());
 }
 
 /// return meta state for given affiliation
@@ -224,9 +275,10 @@ pub fn submitMove(board: *Board, affiliation: Affiliation, move_notation: []cons
             .affiliation = affiliation.opponent(),
             .target_coord = notation.destination,
             .attacking = true,
+            .hypothetical_move = move,
         });
         if (attackers.len > 0)
-            return .enters_check;
+            return if (state.in_check) .in_check else .enters_check;
     } else {
         const checkers = board.query(&buffer, .{
             .affiliation = affiliation.opponent(),
@@ -293,6 +345,8 @@ pub const Query = struct {
     source_rank: ?i8 = null,
     /// query board position as if this move was made
     hypothetical_move: ?Move = null,
+    /// exclude kings from results
+    exclude_king: bool = false,
 };
 
 /// query's the board of pieces
@@ -304,11 +358,13 @@ pub fn query(board: Board, buffer: *[32]usize, query_expr: Query) []const usize 
 
     var board_dupe = board.dupe();
     if (query_expr.hypothetical_move) |move|
-        _ = board_dupe.makeMove(move);
+        _ = board_dupe.forceMove(move);
 
     // write initial pieces with expected affiliation
     for (board_dupe.squares) |square, i| {
         if (square.piece()) |piece| {
+            if (query_expr.exclude_king and piece.class() == .king)
+                continue;
             if (query_expr.affiliation) |affiliation| {
                 if (piece.affiliation() == affiliation) {
                     buffer[count] = i;
@@ -468,28 +524,36 @@ fn isMate(board: *Board, affiliation: Affiliation) bool {
     var buffer: [32]usize = undefined;
 
     // can the king move to safety
-    var coord = state.king_coord.offsetted(-1, -1);
-    while (coord.file <= state.king_coord.file + 1) {
-        while (coord.rank <= state.king_coord.rank + 1) {
-            coord.file = std.math.clamp(coord.file, 0, 7);
-            coord.rank = std.math.clamp(coord.rank, 0, 7);
+    const file_start = std.math.clamp(state.king_coord.file - 1, 0, 7);
+    const rank_start = std.math.clamp(state.king_coord.rank - 1, 0, 7);
+    const file_end = std.math.clamp(state.king_coord.file + 1, 0, 7);
+    const rank_end = std.math.clamp(state.king_coord.rank + 1, 0, 7);
+    var coord = Coordinate.init(file_start, rank_start);
+    while (coord.file <= file_end) {
+        while (coord.rank <= rank_end) {
             // empty or enemy piece
             if (board.at(coord) == null or board.at(coord).?.affiliation() == affiliation.opponent()) {
                 const attackers = board.query(&buffer, .{
                     .affiliation = affiliation.opponent(),
                     .attacking = true,
                     .target_coord = coord,
+                    .hypothetical_move = .{
+                        .piece = Piece.init(.king, affiliation),
+                        .location = state.king_coord,
+                        .destination = coord,
+                    },
                 });
                 if (attackers.len == 0)
                     return false;
             }
             coord.rank += 1;
         }
-        coord.rank = state.king_coord.rank - 1;
+        coord.rank = rank_start;
         coord.file += 1;
     }
 
-    const checkers = board.query(&buffer, .{
+    var checkers_buffer: [32]usize = undefined;
+    const checkers = board.query(&checkers_buffer, .{
         .affiliation = affiliation.opponent(),
         .attacking = true,
         .target_coord = state.king_coord,
@@ -521,12 +585,32 @@ fn isMate(board: *Board, affiliation: Affiliation) bool {
         const blockers = board.query(&buffer, .{
             .affiliation = affiliation,
             .target_coord = c,
+            .exclude_king = true, // cannot block check with king
         });
         if (blockers.len > 0)
             return false;
     }
 
     return true;
+}
+
+/// looks for checks, mates, and draws
+fn checksAndMates(board: *Board, affiliation: Affiliation) MoveResult {
+    var state = board.getMetaState(affiliation);
+    var buffer: [32]usize = undefined;
+    const checkers = board.query(&buffer, .{
+        .affiliation = affiliation.opponent(),
+        .target_coord = state.king_coord,
+        .attacking = true,
+    });
+    if (checkers.len > 0) {
+        state.in_check = true;
+        return if (board.isMate(affiliation))
+            .ok_mate
+        else
+            .ok_check;
+    }
+    return .ok;
 }
 
 /// iterates over squares between two coords exclusive

@@ -147,8 +147,8 @@ pub const Square = struct {
 pub const Move = struct {
     /// piece to move
     piece: Piece,
-    /// where it is
-    location: Coordinate = Coordinate.from1d(0),
+    /// where it is, if null, piece is spawned
+    location: ?Coordinate = null,
     /// where it's going
     destination: Coordinate = Coordinate.from1d(0),
     /// castleing queen or queen, if this is set affiliation

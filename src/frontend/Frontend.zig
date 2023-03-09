@@ -136,7 +136,7 @@ pub fn doCommands(this: *Frontend, input: []const u8) bool {
     const command = arg_iter.next() orelse "";
 
     const help_line = "#wht /exit  /help  /reset";
-    const help_dev_commands = "#wht /exit  /help  /pass  /reset  /clear  /spawn-white  /spawn-black";
+    const help_dev_commands = "#wht /exit  /help  /pass  /reset  /clear  /spawn";
 
     this.status = "#red Unrecognized command";
     if (std.mem.eql(u8, command, "/exit")) {
@@ -164,24 +164,15 @@ pub fn doCommands(this: *Frontend, input: []const u8) bool {
         this.board = chess.Board.initEmpty();
         this.turn_affiliation = .white;
         this.status = "gotcha";
-    } else if (std.mem.eql(u8, command, "/spawn-white")) {
-        const arg = arg_iter.next() orelse {
-            this.status = "#red expected argument #dgry(ex. Ba7)";
-            return false;
-        };
-        if (!this.spawnPiece(.white, arg))
-            this.status = "#red invalid placement expression, must match '[RNBQK]?[a-h][1-8]'"
-        else
-            this.status = "for sure";
-    } else if (std.mem.eql(u8, command, "/spawn-black")) {
+    } else if (std.mem.eql(u8, command, "/spawn")) {
         const arg = arg_iter.next() orelse {
             this.status = "#red expected argument #dgry(ex. Qd4)";
             return false;
         };
-        if (!this.spawnPiece(.black, arg))
-            this.status = "#red invalid placement expression, must match '[RNBQK]?[a-h][1-8]'"
+        if (this.spawnPiece(arg)) |result|
+            this.status = this.statusFromMoveResult(result, "")
         else
-            this.status = "no doubt";
+            this.status = "#red invalid placement expression, must match '[RNBQK]?[a-h][1-8]'";
     } else if (std.mem.eql(u8, command, "/pass")) {
         this.turn_affiliation = this.turn_affiliation.opponent();
         this.status = "okie-doki";
@@ -204,11 +195,9 @@ fn statusForCmdHelp(cmd: []const u8, include_dev_commands: bool) []const u8 {
         return "#red no such command";
 
     if (std.mem.eql(u8, cmd, "clear")) {
-        return "clear all pieces from the board";
-    } else if (std.mem.eql(u8, cmd, "spawn-white")) {
-        return "args: <EX> ; spawns piece for white at given coord, eg. Rh8 or e3";
-    } else if (std.mem.eql(u8, cmd, "spawn-black")) {
-        return "args: <EX> ; spawns piece for black at given coord, eg. Nc2 or b6";
+        return "clear all pieces from the board exept kings";
+    } else if (std.mem.eql(u8, cmd, "spawn")) {
+        return "args: <EX> ; spawns piece for current affiliation at given coord, eg. Rh8 or e3";
     } else if (std.mem.eql(u8, cmd, "pass")) {
         return "passes current turn without making a move";
     }
@@ -290,8 +279,8 @@ fn wasSuccessfulMove(move_result: chess.MoveResult) bool {
     };
 }
 
-fn spawnPiece(this: *Frontend, affiliation: chess.Piece.Affiliation, expr: []const u8) bool {
-    if (expr.len == 0) return false;
+fn spawnPiece(this: *Frontend, expr: []const u8) ?chess.MoveResult {
+    if (expr.len == 0) return null;
     var i: usize = 0;
     const class: chess.Piece.Class = switch (expr[i]) {
         'N' => .knight,
@@ -300,17 +289,19 @@ fn spawnPiece(this: *Frontend, affiliation: chess.Piece.Affiliation, expr: []con
         'Q' => .queen,
         'K' => .king,
         'a'...'h', '1'...'8' => .pawn,
-        else => return false,
+        else => return null,
     };
     if (class != .pawn)
         i += 1;
     if (expr.len != i + 2)
-        return false;
-    if (!chess.Coordinate.isFile(expr[i])) return false;
-    if (!chess.Coordinate.isRank(expr[i + 1])) return false;
+        return null;
+    if (!chess.Coordinate.isFile(expr[i])) return null;
+    if (!chess.Coordinate.isRank(expr[i + 1])) return null;
     const coord = chess.Coordinate.fromString(expr[i .. i + 2]);
-    this.board.spawn(chess.Piece.init(class, affiliation), coord);
-    return true;
+    const result = this.board.spawn(chess.Piece.init(class, this.turn_affiliation), coord);
+    if (wasSuccessfulMove(result))
+        this.turn_affiliation = this.turn_affiliation.opponent();
+    return result;
 }
 
 const ArgIterator = struct {

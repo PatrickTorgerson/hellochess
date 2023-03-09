@@ -76,6 +76,13 @@ pub const Affiliation = enum(u8) {
             .black => Coordinate.fromString("h8"),
         };
     }
+
+    pub fn kingCoord(affiliation_: Affiliation) Coordinate {
+        return switch (affiliation_) {
+            .white => Coordinate.fromString("e1"),
+            .black => Coordinate.fromString("e8"),
+        };
+    }
 };
 
 ///-----------------------------------------------------------------------------
