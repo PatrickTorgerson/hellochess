@@ -486,7 +486,7 @@ fn hasVisability(board: *Board, source: usize, dest: usize, attacking: bool) boo
             .pawn => {
                 if (attacking) {
                     return (dest2d.rank == source2d.rank + affiliation.direction()) and
-                        (dest2d.file == source2d.file + 1 or dest2d.file == source2d.file + 1);
+                        (dest2d.file == source2d.file + 1 or dest2d.file == source2d.file - 1);
                 } else {
                     // double push
                     if (dest2d.rank == affiliation.doublePushRank() and source2d.rank == affiliation.secondRank()) {
@@ -612,12 +612,18 @@ fn isMate(board: *Board, affiliation: Affiliation) bool {
     if (checkers.len > 1)
         return true;
 
+    const defenders = board.query(&buffer, .{
+        .affiliation = affiliation.opponent(),
+        .attacking = true,
+        .target_coord = Coordinate.from1d(checkers[0]),
+    });
+
     // can we capture the checking piece
     const capturing = board.query(&buffer, .{
         .affiliation = affiliation,
         .attacking = true,
         .target_coord = Coordinate.from1d(checkers[0]),
-        // TODO: exclude king if checking piece is defended
+        .exclude_king = defenders.len > 0,
     });
     if (capturing.len > 0)
         return false;
