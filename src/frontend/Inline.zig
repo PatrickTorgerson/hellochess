@@ -59,6 +59,18 @@ fn primeBuffer(writer: *zcon.Writer) void {
 
 /// writes the chess board to the buffer
 fn renderBoard(this: @This(), writer: *zcon.Writer) !void {
+    const white_material = this.frontend.board.countMaterial(.white);
+    const black_material = this.frontend.board.countMaterial(.black);
+    const black_advantage = black_material - white_material;
+    const white_advantage = white_material - black_material;
+
+    writer.clearLine();
+    writer.put("#cyn");
+    try this.frontend.board.writeCapturedPieces(writer, .white);
+    if (black_advantage > 0)
+        writer.fmt("#dgry; +{}", .{black_advantage});
+    writer.put("\n\n");
+
     writer.put(file_line);
     var pos = chess.Coordinate.init(0, 7); // a8
     while (pos.rank >= 0) : (pos.rank -= 1) {
@@ -77,5 +89,13 @@ fn renderBoard(this: @This(), writer: *zcon.Writer) !void {
     }
     writer.put(file_line);
     writer.putChar('\n');
+
+    writer.clearLine();
+    writer.put("#yel");
+    try this.frontend.board.writeCapturedPieces(writer, .black);
+    if (white_advantage > 0)
+        writer.fmt("#dgry; +{}", .{white_advantage});
+    writer.put("\n\n");
+
     writer.useDefaultColors();
 }

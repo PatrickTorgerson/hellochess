@@ -100,7 +100,7 @@ pub const Class = enum(u8) {
     pawn = 1,
     knight = 3,
     bishop = 4, // bishop value is also 3 but enume vals must be unique
-    rook = 6,
+    rook = 5,
     queen = 9,
     king = 0,
 

@@ -85,9 +85,10 @@ pub fn input(cli: *zcon.Cli) !bool {
 
 /// callback to handle help options
 pub fn help(cli: *zcon.Cli) !bool {
-    cli.writer.put("\n== Usage\n\n#indent hellochess [--fullscreen]\n\n== Options\n\n");
+    cli.writer.put("\n==== Usage ====\n\n#indent hellochess [OPTIONS]\n\n==== Options ====\n\n");
     cli.writer.indent(1);
     cli.printOptionHelp();
     cli.writer.unindent(1);
+    cli.writer.putChar('\n');
     return false;
 }

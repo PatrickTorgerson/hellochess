@@ -118,6 +118,49 @@ pub fn at(board: Board, pos: Coordinate) ?Piece {
     return board.squares[pos.to1d()].piece();
 }
 
+/// counts material value for given affiliation
+pub fn countMaterial(board: Board, affiliation: Affiliation) i32 {
+    var buffer: [32]usize = undefined;
+    const pieces = board.query(&buffer, .{
+        .affiliation = affiliation,
+        .exclude_king = true,
+    });
+    var material: i32 = 0;
+    for (pieces) |coord1d| {
+        material += board.squares[coord1d].piece().?.class().value();
+    }
+    return material;
+}
+
+/// write pieces missing fromt affiliated posistion
+pub fn writeCapturedPieces(board: Board, writer: anytype, affiliation: Affiliation) !void {
+    var buffer: [32]usize = undefined;
+    const pieces = board.query(&buffer, .{
+        .affiliation = affiliation,
+        .exclude_king = true,
+    });
+    var pawns: i32 = 0;
+    var bishops: i32 = 0;
+    var knights: i32 = 0;
+    var rooks: i32 = 0;
+    var queens: i32 = 0;
+    for (pieces) |coord1d| {
+        switch (board.squares[coord1d].piece().?.class()) {
+            .pawn => pawns += 1,
+            .bishop => bishops += 1,
+            .knight => knights += 1,
+            .rook => rooks += 1,
+            .queen => queens += 1,
+            .king => {},
+        }
+    }
+    try writer.writeByteNTimes('P', @intCast(usize, std.math.max(8 - pawns, 0)));
+    try writer.writeByteNTimes('B', @intCast(usize, std.math.max(2 - bishops, 0)));
+    try writer.writeByteNTimes('N', @intCast(usize, std.math.max(2 - knights, 0)));
+    try writer.writeByteNTimes('R', @intCast(usize, std.math.max(2 - rooks, 0)));
+    try writer.writeByteNTimes('Q', @intCast(usize, std.math.max(1 - queens, 0)));
+}
+
 /// spawn piece at given coord pending validation
 pub fn spawn(board: *Board, piece: Piece, pos: Coordinate) MoveResult {
     const move = Move{
@@ -282,6 +325,7 @@ pub fn submitMove(board: *Board, affiliation: Affiliation, move_notation: []cons
         return board.castle(affiliation, castle_kingside);
     }
 
+    // cannot capture allied pieces
     if (board.at(notation.destination)) |dest_piece| {
         if (dest_piece.affiliation() == affiliation)
             return .blocked;
@@ -317,7 +361,7 @@ pub fn submitMove(board: *Board, affiliation: Affiliation, move_notation: []cons
             .hypothetical_move = move,
         });
         if (attackers.len > 0)
-            return if (state.in_check) .in_check else .enters_check;
+            return .enters_check;
     } else {
         const checkers = board.query(&buffer, .{
             .affiliation = affiliation.opponent(),
@@ -470,7 +514,7 @@ pub fn query(board: Board, buffer: *[32]usize, query_expr: Query) []const usize 
 
 /// validate that the piece on source square can move to dest square
 /// does not consider checks
-/// can_capture ensures that the source piece can capture on dest, important for pawns
+/// attacking ensures that the source piece can capture on dest, important for pawns
 /// takes source and dest as 1d coordinates
 fn hasVisability(board: *Board, source: usize, dest: usize, attacking: bool) bool {
     std.debug.assert(source < board.squares.len);
@@ -612,28 +656,20 @@ fn isMate(board: *Board, affiliation: Affiliation) bool {
     if (checkers.len > 1)
         return true;
 
-    const defenders = board.query(&buffer, .{
-        .affiliation = affiliation.opponent(),
-        .attacking = true,
-        .target_coord = Coordinate.from1d(checkers[0]),
-    });
-
     // can we capture the checking piece
     const capturing = board.query(&buffer, .{
         .affiliation = affiliation,
         .attacking = true,
         .target_coord = Coordinate.from1d(checkers[0]),
-        .exclude_king = defenders.len > 0,
+        .exclude_king = true, // king capture handled above
     });
     if (capturing.len > 0)
         return false;
 
     // can we block the check
     switch (board.at(Coordinate.from1d(checkers[0])).?.class()) {
-        .pawn,
-        .knight,
-        .king,
-        => return true,
+        // theese pieces cannot be blocked
+        .pawn, .knight, .king => return true,
         else => {},
     }
     var iter = DirectionalIterator.init(state.king_coord, Coordinate.from1d(checkers[0]));
