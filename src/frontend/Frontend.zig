@@ -18,11 +18,50 @@ const PlayMode = enum {
     network_multiplayer,
 };
 
+const Command = struct {
+    dev: bool = false,
+    impl: *const fn (*Frontend, *ArgIterator) []const u8,
+    help: []const u8,
+};
+
+const commands = std.ComptimeStringMap(Command, .{
+    .{ "/exit", .{
+        .impl = cmdExit,
+        .help = "quits the game, no saving",
+    } },
+    .{ "/help", .{
+        .impl = cmdHelp,
+        .help = "args: [CMD] ; print a list of available commands, or info on a specific command [CMD]",
+    } },
+    .{ "/reset", .{
+        .impl = cmdReset,
+        .help = "reset the board for a new game",
+    } },
+
+    .{ "/clear", .{
+        .impl = cmdClear,
+        .help = "clear all pieces from the board exept kings",
+        .dev = true,
+    } },
+    .{ "/pass", .{
+        .impl = cmdPass,
+        .help = "passes current turn without making a move",
+        .dev = true,
+    } },
+    .{ "/spawn", .{
+        .impl = cmdSpawn,
+        .help = "args: <EX> ; spawns piece for current affiliation at given coord, eg. Rh8 or e3",
+        .dev = true,
+    } },
+});
+
 /// stores user's input
 input_buffer: [64]u8 = undefined,
 /// characters in input_buffer
 input_size: usize = 0,
-/// status line for user feedback
+/// helps stores text for status line
+status_buffer: [256]u8 = undefined,
+/// status line for user feedback, not necessarily sliced from status_buffer
 status: []const u8,
 /// big boi chess board
 board: chess.Board,
@@ -34,6 +73,8 @@ turn_affiliation: chess.Piece.Affiliation,
 play_mode: PlayMode,
 /// whether client has access to dev commands
 dev_commands: bool,
+/// whether the client has requested an exit
+should_exit: bool,
 
 // TODO: fields for network connection
 
@@ -46,6 +87,7 @@ pub fn init(dev_commands: bool, play_mode: PlayMode, player_affiliation: chess.P
         .player_affiliation = player_affiliation,
         .play_mode = play_mode,
         .dev_commands = dev_commands,
+        .should_exit = false,
     };
 }
 
@@ -56,25 +98,20 @@ pub fn passAndPlay(dev_commands: bool) Frontend {
 
 /// requests and makes next move
 /// returns true when exit is requested
-pub fn doTurn(this: *Frontend, writer: *zcon.Writer) !bool {
-    return switch (this.play_mode) {
+pub fn doTurn(this: *Frontend, writer: *zcon.Writer) !void {
+    switch (this.play_mode) {
         .pass_and_play => try this.runPassAndPlay(writer),
         .ai_opponent => unreachable, // TODO: implement
         .network_multiplayer => unreachable, // TODO: implement
-    };
+    }
 }
 
 /// turn logic for pass and play mode, returns true if exit is requested
-pub fn runPassAndPlay(this: *Frontend, writer: *zcon.Writer) !bool {
+pub fn runPassAndPlay(this: *Frontend, writer: *zcon.Writer) !void {
     const move = try this.clientMove(writer);
-
-    if (std.mem.eql(u8, move, "/exit"))
-        return true;
-    if (move.len > 0 and move[0] == '/')
-        return false;
-
+    if (isCommand(move))
+        return;
     _ = this.tryMove(move);
-    return false;
 }
 
 /// try to make move, swap turn and return true if successful
@@ -89,7 +126,6 @@ pub fn tryMove(this: *Frontend, move: []const u8) bool {
 }
 
 /// prompts client player for input, makes moves, and handles commands
-/// returns true when exit is requested
 pub fn clientMove(this: *Frontend, writer: *zcon.Writer) ![]const u8 {
     writer.clearLine();
     writer.fmt(" > {s}: ", .{Frontend.promptText(this.turn_affiliation)});
@@ -97,10 +133,8 @@ pub fn clientMove(this: *Frontend, writer: *zcon.Writer) ![]const u8 {
 
     const input = try this.readInput();
 
-    if (isCommand(input)) {
-        const should_break = this.doCommands(input);
-        if (should_break) return "/exit";
-    }
+    if (isCommand(input))
+        this.status = this.doCommands(input);
 
     return input;
 }
@@ -130,82 +164,143 @@ pub fn isCommand(input: []const u8) bool {
     return input.len >= 1 and input[0] == '/';
 }
 
-/// handle / commands, returns true if exit was requested
-pub fn doCommands(this: *Frontend, input: []const u8) bool {
+/// handle / commands, returns status text
+pub fn doCommands(this: *Frontend, input: []const u8) []const u8 {
     var arg_iter = ArgIterator.init(input);
-    const command = arg_iter.next() orelse "";
+    const arg1 = arg_iter.next() orelse "";
 
-    const help_line = "#wht /exit  /help  /reset";
-    const help_dev_commands = "#wht /exit  /help  /pass  /reset  /clear  /spawn";
-
-    this.status = "#red Unrecognized command";
-    if (std.mem.eql(u8, command, "/exit")) {
-        return true;
-    } else if (std.mem.eql(u8, command, "/reset")) {
-        this.board = chess.Board.init();
-        this.turn_affiliation = .white;
-        this.status = "yes sir";
-        return false;
-    } else if (std.mem.eql(u8, command, "/help")) {
-        const arg = arg_iter.next() orelse {
-            this.status = if (this.dev_commands) help_dev_commands else help_line;
-            return false;
-        };
-        this.status = Frontend.statusForCmdHelp(arg, this.dev_commands);
-        return false;
-    }
-
-    // -- dev commands
-    if (!this.dev_commands) {
-        return false;
-    }
-
-    if (std.mem.eql(u8, command, "/clear")) {
-        this.board = chess.Board.initEmpty();
-        this.turn_affiliation = .white;
-        this.status = "gotcha";
-    } else if (std.mem.eql(u8, command, "/spawn")) {
-        const arg = arg_iter.next() orelse {
-            this.status = "#red expected argument #dgry(ex. Qd4)";
-            return false;
-        };
-        if (this.spawnPiece(arg)) |result|
-            this.status = this.statusFromMoveResult(result, "")
-        else
-            this.status = "#red invalid placement expression, must match '[RNBQK]?[a-h][1-8]'";
-    } else if (std.mem.eql(u8, command, "/pass")) {
-        this.turn_affiliation = this.turn_affiliation.opponent();
-        this.status = "okie-doki";
-    } else this.status = "#red Unrecognized command";
-
-    return false;
+    if (commands.get(arg1)) |cmd| {
+        if (cmd.dev and !this.dev_commands) return "#red you cannot use dev commands";
+        return cmd.impl(this, &arg_iter);
+    } else return "#red no such command";
 }
 
-/// return help text for a specific / command
-fn statusForCmdHelp(cmd: []const u8, include_dev_commands: bool) []const u8 {
-    if (std.mem.eql(u8, cmd, "exit")) {
-        return "quits the game, no saving";
-    } else if (std.mem.eql(u8, cmd, "reset")) {
-        return "reset the board for a new game";
-    } else if (std.mem.eql(u8, cmd, "help")) {
-        return "args: [CMD] ; print a list of available commands, or info on a specific command [CMD]";
-    }
-
-    if (!include_dev_commands)
-        return "#red no such command";
-
-    if (std.mem.eql(u8, cmd, "clear")) {
-        return "clear all pieces from the board exept kings";
-    } else if (std.mem.eql(u8, cmd, "spawn")) {
-        return "args: <EX> ; spawns piece for current affiliation at given coord, eg. Rh8 or e3";
-    } else if (std.mem.eql(u8, cmd, "pass")) {
-        return "passes current turn without making a move";
-    }
-
-    return "#red no such command";
+fn cmdExit(this: *Frontend, args: *ArgIterator) []const u8 {
+    _ = args;
+    this.should_exit = true;
+    return "farwell friend";
 }
 
-fn statusFromMoveResult(this: Frontend, move_result: chess.MoveResult, input: []const u8) []const u8 {
+fn cmdHelp(this: *Frontend, args: *ArgIterator) []const u8 {
+    const arg = args.next() orelse
+        return this.commandListStatus();
+    this.status_buffer[0] = '/';
+    std.mem.copy(u8, this.status_buffer[1 .. 1 + arg.len], arg);
+    if (commands.get(this.status_buffer[0 .. 1 + arg.len])) |cmd| {
+        return cmd.help;
+    } else return "#red no such command";
+}
+
+fn cmdReset(this: *Frontend, args: *ArgIterator) []const u8 {
+    _ = args;
+    this.board = chess.Board.init();
+    this.turn_affiliation = .white;
+    return this.confirmationStatus();
+}
+
+fn cmdClear(this: *Frontend, args: *ArgIterator) []const u8 {
+    _ = args;
+    this.board = chess.Board.initEmpty();
+    this.turn_affiliation = .white;
+    return this.confirmationStatus();
+}
+
+fn cmdPass(this: *Frontend, args: *ArgIterator) []const u8 {
+    _ = args;
+    this.turn_affiliation = this.turn_affiliation.opponent();
+    return this.confirmationStatus();
+}
+
+fn cmdSpawn(this: *Frontend, args: *ArgIterator) []const u8 {
+    const arg = args.next() orelse
+        return "#red expected argument #dgry(ex. Qd4)";
+    if (this.spawnPiece(arg)) |result|
+        return this.statusFromMoveResult(result, "")
+    else
+        return "#red invalid placement expression, must match '[RNBQK]?[a-h][1-8]'";
+}
+
+/// return list of commands, overwrite status_buffer
+fn commandListStatus(this: *Frontend) []const u8 {
+    var stream = std.io.fixedBufferStream(&this.status_buffer);
+    var writer = stream.writer();
+    for (commands.kvs[0..]) |kv| {
+        if (kv.value.dev and !this.dev_commands) continue;
+        writer.writeAll(kv.key) catch {};
+        writer.writeAll("  ") catch {};
+    }
+    return this.status_buffer[0..stream.pos];
+}
+
+/// return random confirmation status message
+fn confirmationStatus(this: *Frontend) []const u8 {
+    _ = this;
+    const seed = @truncate(u64, @bitCast(u128, std.time.nanoTimestamp()));
+    var rand = std.rand.DefaultPrng.init(seed);
+    const responses = [_][]const u8{
+        "gotcha",
+        "okie-doki",
+        "no doubt",
+        "yes sir",
+        "cool cool",
+        "100%",
+        "done",
+        "for sure",
+        "yes absolutely I will",
+        "yeah, yeah",
+        "fine",
+        "whatever",
+        "I knew you would say that",
+        "oh really?",
+        "interesting...",
+        "if you say so",
+        "your wish is my /command",
+        "woah, totally excellent!",
+        "#blu G#red O#yel O#blu D#grn !",
+        "again?",
+        "#dgry hmmm...",
+        "#byel :P",
+        "okay",
+        "about time",
+        "Obla-di, Obla-da",
+        "life goes on",
+        "what next?",
+        "I guess so",
+        "it's pretty late...",
+        "living on the edge, huh?",
+        "alrighty then",
+        "BOOONE!?!",
+        "I've heard it both ways",
+        "you dirty cheat",
+        "geese of a feather",
+        "ok",
+        "lemme see",
+        "look at that",
+        "there it is",
+        "sure",
+        "#bgrn CONFIRMATION!",
+        "look at you go",
+        "I just adore you",
+        "I wish that I knew...",
+        "what makes you think I'm so speacial?",
+        " O.O ",
+        "right",
+        "y'all come back now, ya hear?",
+        "are you still there?",
+        "fantastic",
+        "knights move like an L",
+        "got em",
+        "can you just win already?",
+        "so needy...",
+        "maybe just relax",
+        "how many of theese are there anyway?",
+        "$20 if you leave right now",
+    };
+    const at = rand.random().uintAtMost(usize, responses.len - 1);
+    return responses[at];
+}
+
+fn statusFromMoveResult(this: *Frontend, move_result: chess.MoveResult, input: []const u8) []const u8 {
     return switch (move_result) {
         .ok => "#grn ok",
         .ok_en_passant => "#grn En Passant!",
@@ -214,7 +309,7 @@ fn statusFromMoveResult(this: Frontend, move_result: chess.MoveResult, input: []
         .ok_stalemate => "#wht draw",
         .ok_repitition => "#wht draw",
         .ok_insufficient_material => "#wht draw",
-        .bad_notation => Frontend.badNotationStatus(input),
+        .bad_notation => this.badNotationStatus(input),
         .bad_disambiguation => "#red no such piece on specified rank or file",
         .ambiguous_piece => "#red ambiguous move",
         .no_such_piece => "#red no such piece",
@@ -229,22 +324,16 @@ fn statusFromMoveResult(this: Frontend, move_result: chess.MoveResult, input: []
     };
 }
 
-fn badNotationStatus(input: []const u8) []const u8 {
+fn badNotationStatus(this: *Frontend, input: []const u8) []const u8 {
     var arg_iter = ArgIterator.init(input);
-    const command = arg_iter.next() orelse "";
+    const arg = arg_iter.next() orelse "";
 
-    if (std.mem.eql(u8, command, "exit") or
-        std.mem.eql(u8, command, "reset") or
-        std.mem.eql(u8, command, "clear") or
-        std.mem.eql(u8, command, "pass") or
-        std.mem.eql(u8, command, "spawn-white") or
-        std.mem.eql(u8, command, "spawn-black") or
-        std.mem.eql(u8, command, "help"))
-    {
+    this.status_buffer[0] = '/';
+    std.mem.copy(u8, this.status_buffer[1 .. 1 + arg.len], arg);
+
+    if (commands.get(this.status_buffer[0 .. 1 + arg.len])) |_| {
         return "#red did you forget a slash?";
-    }
-
-    return "#red this does not look like a chess move";
+    } else return "#red this does not look like a chess move";
 }
 
 fn winStatus(this: Frontend) []const u8 {
