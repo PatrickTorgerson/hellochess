@@ -18,6 +18,13 @@ const PlayMode = enum {
     network_multiplayer,
 };
 
+const WinState = enum {
+    ongoing,
+    white,
+    black,
+    draw,
+};
+
 const Command = struct {
     dev: bool = false,
     impl: *const fn (*Frontend, *ArgIterator) []const u8,
@@ -36,6 +43,14 @@ const commands = std.ComptimeStringMap(Command, .{
     .{ "/reset", .{
         .impl = cmdReset,
         .help = "reset the board for a new game",
+    } },
+    .{ "/resign", .{
+        .impl = cmdResign,
+        .help = "resign the game, resulting in a victory for your opponent",
+    } },
+    .{ "/draw", .{
+        .impl = cmdDraw,
+        .help = "offer a draw to your opponent",
     } },
 
     .{ "/clear", .{
@@ -75,6 +90,10 @@ play_mode: PlayMode,
 dev_commands: bool,
 /// whether the client has requested an exit
 should_exit: bool,
+/// who won the game
+win_state: WinState = .ongoing,
+/// a player offers a draw
+draw_offered: ?chess.Piece.Affiliation = null,
 
 // TODO: fields for network connection
 
@@ -112,6 +131,13 @@ pub fn runPassAndPlay(this: *Frontend, writer: *zcon.Writer) !void {
     if (isCommand(move))
         return;
     _ = this.tryMove(move);
+
+    if (this.draw_offered != null and this.draw_offered.? != this.turn_affiliation) {
+        this.status = switch (this.draw_offered.?) {
+            .white => "white offerd a draw, /draw to accept",
+            .black => "black offerd a draw, /draw to accept",
+        };
+    }
 }
 
 /// try to make move, swap turn and return true if successful
@@ -128,13 +154,35 @@ pub fn tryMove(this: *Frontend, move: []const u8) bool {
 /// prompts client player for input, makes moves, and handles commands
 pub fn clientMove(this: *Frontend, writer: *zcon.Writer) ![]const u8 {
     writer.clearLine();
-    writer.fmt(" > {s}: ", .{Frontend.promptText(this.turn_affiliation)});
+    writer.fmt(" > {s}: ", .{this.promptText()});
     writer.flush();
 
     const input = try this.readInput();
 
+    if (this.win_state != .ongoing) {
+        var iter = ArgIterator.init(input);
+        if (std.mem.eql(u8, input, "y") or
+            std.mem.eql(u8, input, "Y") or
+            std.mem.eql(u8, input, "yes") or
+            std.mem.eql(u8, input, "Yes"))
+            this.status = cmdReset(this, &iter)
+        else if (std.mem.eql(u8, input, "n") or
+            std.mem.eql(u8, input, "N") or
+            std.mem.eql(u8, input, "no") or
+            std.mem.eql(u8, input, "No"))
+            this.should_exit = true
+        else
+            this.status = "yes or no";
+
+        return "/";
+    }
+
     if (isCommand(input))
         this.status = this.doCommands(input);
+
+    if (this.draw_offered != null and this.draw_offered.? != this.turn_affiliation) {
+        this.draw_offered = null;
+    }
 
     return input;
 }
@@ -152,11 +200,14 @@ pub fn getLastInput(this: *Frontend) []const u8 {
 }
 
 /// returns prompt text for given affiliation
-pub fn promptText(turn_affiliation: chess.Piece.Affiliation) []const u8 {
-    return switch (turn_affiliation) {
-        .white => "#cyn white to move #def",
-        .black => "#yel black to move #def",
-    };
+pub fn promptText(this: Frontend) []const u8 {
+    if (this.win_state != .ongoing)
+        return "play again? (y,n)#def"
+    else
+        return switch (this.turn_affiliation) {
+            .white => "#cyn white to move #def",
+            .black => "#yel black to move #def",
+        };
 }
 
 /// determines if input is a / command
@@ -195,6 +246,8 @@ fn cmdReset(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
     this.board = chess.Board.init();
     this.turn_affiliation = .white;
+    this.win_state = .ongoing;
+    this.draw_offered = null;
     return this.confirmationStatus();
 }
 
@@ -202,6 +255,8 @@ fn cmdClear(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
     this.board = chess.Board.initEmpty();
     this.turn_affiliation = .white;
+    this.win_state = .ongoing;
+    this.draw_offered = null;
     return this.confirmationStatus();
 }
 
@@ -218,6 +273,29 @@ fn cmdSpawn(this: *Frontend, args: *ArgIterator) []const u8 {
         return this.statusFromMoveResult(result, "")
     else
         return "#red invalid placement expression, must match '[RNBQK]?[a-h][1-8]'";
+}
+
+fn cmdDraw(this: *Frontend, args: *ArgIterator) []const u8 {
+    _ = args;
+    if (this.draw_offered == null) {
+        this.draw_offered = this.turn_affiliation;
+        return "make a move, opponent can accept your offer on their turn";
+    } else {
+        this.win_state = .draw;
+        return "#byel draw by agreement";
+    }
+}
+
+fn cmdResign(this: *Frontend, args: *ArgIterator) []const u8 {
+    _ = args;
+    this.win_state = switch (this.turn_affiliation.opponent()) {
+        .white => .white,
+        .black => .black,
+    };
+    return if (this.turn_affiliation == .white)
+        "#grn white resigns! black wins!"
+    else
+        "#grn black resigns! white wins!";
 }
 
 /// return list of commands, overwrite status_buffer
@@ -336,7 +414,11 @@ fn badNotationStatus(this: *Frontend, input: []const u8) []const u8 {
     } else return "#red this does not look like a chess move";
 }
 
-fn winStatus(this: Frontend) []const u8 {
+fn winStatus(this: *Frontend) []const u8 {
+    this.win_state = switch (this.turn_affiliation) {
+        .white => .white,
+        .black => .black,
+    };
     return if (this.turn_affiliation == .white)
         "#grn checkmate! white wins!"
     else
