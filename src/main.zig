@@ -19,15 +19,8 @@ pub fn main() !void {
     defer writer.useDefaultColors();
 
     // parse command line
-    const parse_success = parseCli(&writer) catch |err| {
-        switch (err) {
-            // it would be cool if we could get the option name here :/
-            error.unrecognized_option => writer.put("\n#red unrecognized option\n"),
-            else => return err,
-        }
+    if (!try parseCli(&writer))
         return;
-    };
-    if (!parse_success) return;
 
     if (use_fullscreen) {
         var fullscreen = FullscreenFrontend{ .frontend = Frontend.passAndPlay(use_dev_commands) };
@@ -43,25 +36,14 @@ pub fn parseCli(writer: *zcon.Writer) !bool {
     defer arena.deinit();
     var allocator = arena.allocator();
 
-    var cli = try zcon.Cli.init(allocator, writer, option, input);
+    var cli = try zcon.Cli.init(allocator, writer);
     defer cli.deinit();
 
+    cli.option_callback = option;
+    cli.input_callback = input;
     cli.help_callback = help;
 
-    try cli.addOption(.{
-        .alias_long = "fullscreen",
-        .alias_short = "",
-        .desc = "use the fullscreen frontend",
-        .help = "not sure this is used atm",
-    });
-    try cli.addOption(.{
-        .alias_long = "enable-dev-commands",
-        .alias_short = "",
-        .desc = "enable access to dev commands",
-        .help = "not sure this is used atm",
-    });
-
-    return try cli.parse();
+    return try cli.parse(options);
 }
 
 /// callback to handle command line options
@@ -87,8 +69,20 @@ pub fn input(cli: *zcon.Cli) !bool {
 pub fn help(cli: *zcon.Cli) !bool {
     cli.writer.put("\n==== Usage ====\n\n#indent hellochess [OPTIONS]\n\n==== Options ====\n\n");
     cli.writer.indent(1);
-    cli.printOptionHelp();
+    cli.printOptionHelp(options);
     cli.writer.unindent(1);
     cli.writer.putChar('\n');
     return false;
 }
+
+const options = zcon.Cli.OptionList(.{ .{
+    .alias_long = "fullscreen",
+    .alias_short = "",
+    .desc = "use the fullscreen frontend",
+    .help = "not sure this is used atm",
+}, .{
+    .alias_long = "enable-dev-commands",
+    .alias_short = "",
+    .desc = "enable access to dev commands",
+    .help = "not sure this is used atm",
+} });
