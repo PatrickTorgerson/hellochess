@@ -279,11 +279,12 @@ fn cmdDraw(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
     if (this.draw_offered == null) {
         this.draw_offered = this.turn_affiliation;
-        return "make a move, opponent can accept your offer on their turn";
-    } else {
+        return "make a move, your opponent can accept your offer on their turn";
+    } else if (this.draw_offered != this.turn_affiliation) {
         this.win_state = .draw;
         return "#byel draw by agreement";
     }
+    return "yeah yeah, just make a move";
 }
 
 fn cmdResign(this: *Frontend, args: *ArgIterator) []const u8 {

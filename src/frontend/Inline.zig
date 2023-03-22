@@ -44,6 +44,7 @@ pub fn run(this: *@This(), writer: *zcon.Writer) !void {
         if (this.frontend.should_exit)
             break;
     }
+    writer.put("\n");
 }
 
 /// write spaces to the area we will be rendering to
@@ -67,7 +68,7 @@ fn renderBoard(this: @This(), writer: *zcon.Writer) !void {
     writer.clearLine();
     writer.put("#cyn");
     try this.frontend.board.writeCapturedPieces(writer, .white);
-    if (black_advantage > 0)
+    if (black_advantage >= 0)
         writer.fmt("#dgry; +{}", .{black_advantage});
     writer.put("\n\n");
 
@@ -93,7 +94,7 @@ fn renderBoard(this: @This(), writer: *zcon.Writer) !void {
     writer.clearLine();
     writer.put("#yel");
     try this.frontend.board.writeCapturedPieces(writer, .black);
-    if (white_advantage > 0)
+    if (white_advantage >= 0)
         writer.fmt("#dgry; +{}", .{white_advantage});
     writer.put("\n\n");
 
