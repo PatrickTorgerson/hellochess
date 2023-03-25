@@ -444,7 +444,7 @@ pub fn query(board: Board, buffer: *[32]usize, query_expr: Query) []const usize 
         _ = board_dupe.forceMove(move);
 
     // write initial pieces with expected affiliation
-    for (board_dupe.squares) |square, i| {
+    for (board_dupe.squares, 0..) |square, i| {
         if (square.piece()) |piece| {
             if (query_expr.exclude_king and piece.class() == .king)
                 continue;
