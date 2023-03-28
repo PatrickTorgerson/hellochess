@@ -1,11 +1,12 @@
-// ********************************************************************************
+// *******************************************************
 //  https://github.com/PatrickTorgerson/hellochess
 //  Copyright (c) 2022 Patrick Torgerson
 //  MIT license, see LICENSE for more information
-// ********************************************************************************
+// *******************************************************
 
-//! Here is the logic and main loop for the fullscreen front end
-//! This front end uses a full alternate buffer
+//!
+//! Here is the logic and main loop for the inline front end
+//!
 
 const std = @import("std");
 const chess = @import("../hellochess.zig");
@@ -60,40 +61,42 @@ fn primeBuffer(writer: *zcon.Writer) void {
 
 /// writes the chess board to the buffer
 fn renderBoard(this: @This(), writer: *zcon.Writer) !void {
-    const white_material = this.frontend.board.countMaterial(.white);
-    const black_material = this.frontend.board.countMaterial(.black);
+    const white_material = this.frontend.position.countMaterial(.white);
+    const black_material = this.frontend.position.countMaterial(.black);
     const black_advantage = black_material - white_material;
     const white_advantage = white_material - black_material;
 
     writer.clearLine();
     writer.put("#cyn");
-    try this.frontend.board.writeCapturedPieces(writer, .white);
+    try this.frontend.position.writeCapturedPieces(writer, .white);
     if (black_advantage >= 0)
         writer.fmt("#dgry; +{}", .{black_advantage});
     writer.put("\n\n");
 
     writer.put(file_line);
-    var pos = chess.Coordinate.init(0, 7); // a8
-    while (pos.rank >= 0) : (pos.rank -= 1) {
-        writer.fmt("#dgry {} ", .{pos.rank + 1});
-        while (pos.file < 8) : (pos.file += 1) {
-            if (this.frontend.board.at(pos)) |piece| {
-                const piece_col = if (piece.affiliation() == .white)
+    var rankv: i8 = 7; // Rank 8
+    while (rankv >= 0) : (rankv -= 1) {
+        writer.fmt("#dgry {} ", .{rankv + 1});
+        var file_iter = chess.File.file_a.iterator();
+        while (file_iter.next()) |file| {
+            const coord = chess.Coordinate.from2d(file, chess.Rank.init(rankv));
+            const piece = this.frontend.position.at(coord);
+            if (!piece.isEmpty()) {
+                const piece_col = if (piece.affiliation().? == .white)
                     "#cyn"
                 else
                     "#yel";
                 writer.fmt("{s}{u} ", .{ piece_col, piece.character() });
             } else writer.put("#dgry . ");
         }
-        writer.fmt("#dgry {}\n", .{pos.rank + 1});
-        pos.file = 0;
+        writer.fmt("#dgry {}\n", .{rankv + 1});
     }
     writer.put(file_line);
     writer.putChar('\n');
 
     writer.clearLine();
     writer.put("#yel");
-    try this.frontend.board.writeCapturedPieces(writer, .black);
+    try this.frontend.position.writeCapturedPieces(writer, .black);
     if (white_advantage >= 0)
         writer.fmt("#dgry; +{}", .{white_advantage});
     writer.put("\n\n");

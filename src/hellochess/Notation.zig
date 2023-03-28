@@ -1,29 +1,27 @@
-// ********************************************************************************
+// *******************************************************
 //  https://github.com/PatrickTorgerson/hellochess
 //  Copyright (c) 2022 Patrick Torgerson
 //  MIT license, see LICENSE for more information
-// ********************************************************************************
+// *******************************************************
 
 //! internal struct representing a parsed PGN move
 
 const std = @import("std");
 
+const Coordinate = @import("Coordinate.zig");
+const Move = @import("Move.zig");
 const Piece = @import("Piece.zig");
 const Class = Piece.Class;
 const Affiliation = Piece.Affiliation;
-
-const types = @import("types.zig");
-const Square = types.Square;
-const Coordinate = types.Coordinate;
-const Move = types.Move;
-const MoveResult = types.MoveResult;
+const File = Coordinate.File;
+const Rank = Coordinate.Rank;
 
 const Notation = @This();
 
 class: Class = .pawn,
-source_file: ?i8 = null,
-source_rank: ?i8 = null,
-destination: Coordinate = Coordinate.fromString("a1"),
+source_file: ?File = null,
+source_rank: ?Rank = null,
+destination: Coordinate = Coordinate.a1,
 promote_to: ?Class = null,
 expect_capture: bool = false,
 castle_kingside: ?bool = null,

@@ -1,8 +1,8 @@
-// ********************************************************************************
+// *******************************************************
 //  https://github.com/PatrickTorgerson/hellochess
 //  Copyright (c) 2022 Patrick Torgerson
 //  MIT license, see LICENSE for more information
-// ********************************************************************************
+// *******************************************************
 
 const std = @import("std");
 const zcon = @import("zcon");
@@ -48,10 +48,10 @@ pub fn parseCli(writer: *zcon.Writer) !bool {
 
 /// callback to handle command line options
 pub fn option(cli: *zcon.Cli) !bool {
-    if (cli.isArg("fullscreen")) {
+    if (cli.isOption("fullscreen")) {
         use_fullscreen = true;
         return true;
-    } else if (cli.isArg("enable-dev-commands")) {
+    } else if (cli.isOption("enable-dev-commands")) {
         use_dev_commands = true;
         // TODO: incompatable with network play
         return true;

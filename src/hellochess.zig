@@ -1,15 +1,18 @@
-// ********************************************************************************
+// *******************************************************
 //  https://github.com/PatrickTorgerson/hellochess
 //  Copyright (c) 2022 Patrick Torgerson
 //  MIT license, see LICENSE for more information
-// ********************************************************************************
-
-const types = @import("hellochess/types.zig");
+// *******************************************************
 
 pub const Piece = @import("hellochess/Piece.zig");
-pub const Board = @import("hellochess/Board.zig");
+pub const Position = @import("hellochess/Position.zig");
+pub const Coordinate = @import("hellochess/Coordinate.zig");
+pub const Move = @import("hellochess/Move.zig");
+pub const Meta = @import("hellochess/Meta.zig");
+pub const Notation = @import("hellochess/Notation.zig");
 
-pub const Square = types.Square;
-pub const Coordinate = types.Coordinate;
-pub const Move = types.Move;
-pub const MoveResult = types.MoveResult;
+pub const File = Coordinate.File;
+pub const Rank = Coordinate.Rank;
+pub const Direction = Coordinate.Direction;
+pub const Affiliation = Piece.Affiliation;
+pub const Class = Piece.Class;

@@ -1,8 +1,8 @@
-// ********************************************************************************
+// *******************************************************
 //  https://github.com/PatrickTorgerson/hellochess
 //  Copyright (c) 2022 Patrick Torgerson
 //  MIT license, see LICENSE for more information
-// ********************************************************************************
+// *******************************************************
 
 //! General utility code for front end
 
@@ -79,11 +79,9 @@ status_buffer: [256]u8 = undefined,
 /// status line for user feedback, not necessarily sliced from status_buffer
 status: []const u8,
 /// big boi chess board
-board: chess.Board,
+position: chess.Position,
 /// piece color of client player
-player_affiliation: chess.Piece.Affiliation,
-/// whose turn is it anyway
-turn_affiliation: chess.Piece.Affiliation,
+player_affiliation: chess.Affiliation,
 /// I just like havin a doc comment on evry field ok
 play_mode: PlayMode,
 /// whether client has access to dev commands
@@ -93,16 +91,15 @@ should_exit: bool,
 /// who won the game
 win_state: WinState = .ongoing,
 /// a player offers a draw
-draw_offered: ?chess.Piece.Affiliation = null,
+draw_offered: ?chess.Affiliation = null,
 
 // TODO: fields for network connection
 
 /// a new frontend
-pub fn init(dev_commands: bool, play_mode: PlayMode, player_affiliation: chess.Piece.Affiliation) Frontend {
+pub fn init(dev_commands: bool, play_mode: PlayMode, player_affiliation: chess.Affiliation) Frontend {
     return .{
         .status = "#wht Let's play some chess!",
-        .board = chess.Board.init(),
-        .turn_affiliation = .white,
+        .position = chess.Position.init(),
         .player_affiliation = player_affiliation,
         .play_mode = play_mode,
         .dev_commands = dev_commands,
@@ -132,7 +129,7 @@ pub fn runPassAndPlay(this: *Frontend, writer: *zcon.Writer) !void {
         return;
     _ = this.tryMove(move);
 
-    if (this.draw_offered != null and this.draw_offered.? != this.turn_affiliation) {
+    if (this.draw_offered != null and this.draw_offered.? != this.position.side_to_move) {
         this.status = switch (this.draw_offered.?) {
             .white => "white offerd a draw, /draw to accept",
             .black => "black offerd a draw, /draw to accept",
@@ -142,12 +139,9 @@ pub fn runPassAndPlay(this: *Frontend, writer: *zcon.Writer) !void {
 
 /// try to make move, swap turn and return true if successful
 pub fn tryMove(this: *Frontend, move: []const u8) bool {
-    const result = this.board.submitMove(this.turn_affiliation, move);
+    const result = this.position.submitMove(move);
     this.status = this.statusFromMoveResult(result, move);
     const success = Frontend.wasSuccessfulMove(result);
-    if (success) {
-        this.turn_affiliation = this.turn_affiliation.opponent();
-    }
     return success;
 }
 
@@ -180,7 +174,7 @@ pub fn clientMove(this: *Frontend, writer: *zcon.Writer) ![]const u8 {
     if (isCommand(input))
         this.status = this.doCommands(input);
 
-    if (this.draw_offered != null and this.draw_offered.? != this.turn_affiliation) {
+    if (this.draw_offered != null and this.draw_offered.? != this.position.side_to_move) {
         this.draw_offered = null;
     }
 
@@ -204,7 +198,7 @@ pub fn promptText(this: Frontend) []const u8 {
     if (this.win_state != .ongoing)
         return "play again? (y,n)#def"
     else
-        return switch (this.turn_affiliation) {
+        return switch (this.position.side_to_move) {
             .white => "#cyn white to move #def",
             .black => "#yel black to move #def",
         };
@@ -244,8 +238,7 @@ fn cmdHelp(this: *Frontend, args: *ArgIterator) []const u8 {
 
 fn cmdReset(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
-    this.board = chess.Board.init();
-    this.turn_affiliation = .white;
+    this.position = chess.Position.init();
     this.win_state = .ongoing;
     this.draw_offered = null;
     return this.confirmationStatus();
@@ -253,8 +246,7 @@ fn cmdReset(this: *Frontend, args: *ArgIterator) []const u8 {
 
 fn cmdClear(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
-    this.board = chess.Board.initEmpty();
-    this.turn_affiliation = .white;
+    this.position = chess.Position.initEmpty();
     this.win_state = .ongoing;
     this.draw_offered = null;
     return this.confirmationStatus();
@@ -262,7 +254,7 @@ fn cmdClear(this: *Frontend, args: *ArgIterator) []const u8 {
 
 fn cmdPass(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
-    this.turn_affiliation = this.turn_affiliation.opponent();
+    this.position.side_to_move = this.position.side_to_move.opponent();
     return this.confirmationStatus();
 }
 
@@ -278,9 +270,9 @@ fn cmdSpawn(this: *Frontend, args: *ArgIterator) []const u8 {
 fn cmdDraw(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
     if (this.draw_offered == null) {
-        this.draw_offered = this.turn_affiliation;
+        this.draw_offered = this.position.side_to_move;
         return "make a move, your opponent can accept your offer on their turn";
-    } else if (this.draw_offered != this.turn_affiliation) {
+    } else if (this.draw_offered != this.position.side_to_move) {
         this.win_state = .draw;
         return "#byel draw by agreement";
     }
@@ -289,11 +281,11 @@ fn cmdDraw(this: *Frontend, args: *ArgIterator) []const u8 {
 
 fn cmdResign(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
-    this.win_state = switch (this.turn_affiliation.opponent()) {
+    this.win_state = switch (this.position.side_to_move.opponent()) {
         .white => .white,
         .black => .black,
     };
-    return if (this.turn_affiliation == .white)
+    return if (this.position.side_to_move == .white)
         "#grn white resigns! black wins!"
     else
         "#grn black resigns! white wins!";
@@ -379,7 +371,7 @@ fn confirmationStatus(this: *Frontend) []const u8 {
     return responses[at];
 }
 
-fn statusFromMoveResult(this: *Frontend, move_result: chess.MoveResult, input: []const u8) []const u8 {
+fn statusFromMoveResult(this: *Frontend, move_result: chess.Move.Result, input: []const u8) []const u8 {
     return switch (move_result) {
         .ok => "#grn ok",
         .ok_en_passant => "#grn En Passant!",
@@ -396,10 +388,9 @@ fn statusFromMoveResult(this: *Frontend, move_result: chess.MoveResult, input: [
         .in_check => "#red you are in check",
         .enters_check => "#red you cannot put yourself in check",
         .blocked => "#red there is a piece in your way",
-        .castle_in_check => "#red cannot castle out of check",
-        .castle_through_check => "#red cannot castle through check",
-        .castle_king_moved => "#red you have already moved your king",
-        .castle_rook_moved => "#red that rook has already moved",
+        .bad_castle_in_check => "#red cannot castle out of check",
+        .bad_castle_through_check => "#red cannot castle through check",
+        .bad_castle_king_or_rook_moved => "#red you have already moved your king or rook",
     };
 }
 
@@ -416,17 +407,18 @@ fn badNotationStatus(this: *Frontend, input: []const u8) []const u8 {
 }
 
 fn winStatus(this: *Frontend) []const u8 {
-    this.win_state = switch (this.turn_affiliation) {
+    this.position.side_to_move = this.position.side_to_move.opponent();
+    this.win_state = switch (this.position.side_to_move) {
         .white => .white,
         .black => .black,
     };
-    return if (this.turn_affiliation == .white)
+    return if (this.position.side_to_move == .white)
         "#grn checkmate! white wins!"
     else
         "#grn checkmate! black wins!";
 }
 
-fn wasSuccessfulMove(move_result: chess.MoveResult) bool {
+fn wasSuccessfulMove(move_result: chess.Move.Result) bool {
     return switch (move_result) {
         .ok,
         .ok_en_passant,
@@ -437,10 +429,9 @@ fn wasSuccessfulMove(move_result: chess.MoveResult) bool {
         .ok_insufficient_material,
         => true,
 
-        .castle_in_check,
-        .castle_through_check,
-        .castle_king_moved,
-        .castle_rook_moved,
+        .bad_castle_in_check,
+        .bad_castle_through_check,
+        .bad_castle_king_or_rook_moved,
         .bad_notation,
         .bad_disambiguation,
         .ambiguous_piece,
@@ -453,7 +444,7 @@ fn wasSuccessfulMove(move_result: chess.MoveResult) bool {
     };
 }
 
-fn spawnPiece(this: *Frontend, expr: []const u8) ?chess.MoveResult {
+fn spawnPiece(this: *Frontend, expr: []const u8) ?chess.Move.Result {
     if (expr.len == 0) return null;
     var i: usize = 0;
     const class: chess.Piece.Class = switch (expr[i]) {
@@ -472,10 +463,7 @@ fn spawnPiece(this: *Frontend, expr: []const u8) ?chess.MoveResult {
     if (!chess.Coordinate.isFile(expr[i])) return null;
     if (!chess.Coordinate.isRank(expr[i + 1])) return null;
     const coord = chess.Coordinate.fromString(expr[i .. i + 2]);
-    const result = this.board.spawn(chess.Piece.init(class, this.turn_affiliation), coord);
-    if (wasSuccessfulMove(result))
-        this.turn_affiliation = this.turn_affiliation.opponent();
-    return result;
+    return this.position.spawn(class, coord);
 }
 
 const ArgIterator = struct {

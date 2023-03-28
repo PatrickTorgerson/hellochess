@@ -1,19 +1,18 @@
-// ********************************************************************************
+// *******************************************************
 //  https://github.com/PatrickTorgerson/hellochess
 //  Copyright (c) 2022 Patrick Torgerson
 //  MIT license, see LICENSE for more information
-// ********************************************************************************
+// *******************************************************
 
 const std = @import("std");
 
 pub const Piece = @This();
 
-const Coordinate = @import("types.zig").Coordinate;
+const Coordinate = @import("Coordinate.zig");
+const Bitfield = @import("util.zig").Bitfield;
 
-///-----------------------------------------------------------------------------
 ///  A piece's affiliation, white or black
-///
-pub const Affiliation = enum(u8) {
+pub const Affiliation = enum(u1) {
     white = 0,
     black = 1,
 
@@ -25,81 +24,80 @@ pub const Affiliation = enum(u8) {
         };
     }
 
-    /// return the direction pawns move, -1 or +1
-    pub fn direction(affiliation_: Affiliation) i8 {
+    /// return the direction pawns move
+    pub fn direction(affiliation_: Affiliation) Coordinate.Direction {
         return switch (affiliation_) {
-            .white => 1,
-            .black => -1,
+            .white => .north,
+            .black => .south,
         };
     }
-    /// return the reverse of direction pawns move, -1 or +1
-    pub fn reverseDirection(affiliation_: Affiliation) i8 {
-        return -affiliation_.direction();
+
+    /// return the reverse of direction pawns move
+    pub fn reverseDirection(affiliation_: Affiliation) Coordinate.Direction {
+        return affiliation_.direction().reversed();
     }
 
     /// return the rank pawns get pushed to when moving two squares
-    pub fn doublePushRank(affiliation_: Affiliation) i8 {
+    pub fn doublePushRank(affiliation_: Affiliation) Coordinate.Rank {
         return switch (affiliation_) {
-            .white => 3, // 4
-            .black => 4, // 5  zero based indecies am I right
+            .white => .rank_4,
+            .black => .rank_5,
         };
     }
 
-    /// return the second rank
-    pub fn secondRank(affiliation_: Affiliation) i8 {
+    /// return the affiliated second rank
+    pub fn secondRank(affiliation_: Affiliation) Coordinate.Rank {
         return switch (affiliation_) {
-            .white => 1, // 2
-            .black => 6, // 7  zero based indecies am I right
+            .white => .rank_2,
+            .black => .rank_7,
         };
     }
 
     /// return rank an allied pawn can en passant from
-    pub fn enPassantRank(affiliation_: Affiliation) i8 {
+    pub fn enPassantRank(affiliation_: Affiliation) Coordinate.Rank {
         return switch (affiliation_) {
-            .white => 4, // 5
-            .black => 3, // 4  zero based indecies am I right
+            .white => .rank_5,
+            .black => .rank_4,
         };
     }
 
-    /// return the back rank
-    pub fn backRank(affiliation_: Affiliation) i8 {
+    /// return the affiliated back rank
+    pub fn backRank(affiliation_: Affiliation) Coordinate.Rank {
         return switch (affiliation_) {
-            .white => 0, // 1
-            .black => 7, // 8  zero based indecies am I right
+            .white => .rank_1,
+            .black => .rank_8,
         };
     }
 
     /// return starting coord of the rook on file a
     pub fn aRookCoord(affiliation_: Affiliation) Coordinate {
         return switch (affiliation_) {
-            .white => Coordinate.fromString("a1"),
-            .black => Coordinate.fromString("a8"),
+            .white => Coordinate.a1,
+            .black => Coordinate.a8,
         };
     }
 
     /// return starting coord of the rook on file h
     pub fn hRookCoord(affiliation_: Affiliation) Coordinate {
         return switch (affiliation_) {
-            .white => Coordinate.fromString("h1"),
-            .black => Coordinate.fromString("h8"),
+            .white => Coordinate.h1,
+            .black => Coordinate.h8,
         };
     }
 
     pub fn kingCoord(affiliation_: Affiliation) Coordinate {
         return switch (affiliation_) {
-            .white => Coordinate.fromString("e1"),
-            .black => Coordinate.fromString("e8"),
+            .white => Coordinate.e1,
+            .black => Coordinate.e8,
         };
     }
 };
 
-///-----------------------------------------------------------------------------
 ///  Type of piece independent of affiliation
-///
-pub const Class = enum(u8) {
+pub const Class = enum(u4) {
     pawn = 1,
     knight = 3,
-    bishop = 4, // bishop value is also 3 but enume vals must be unique
+    bishop = 4, // bishop value is also 3 but enum vals must be unique
     rook = 5,
     queen = 9,
     king = 0,
@@ -115,7 +113,7 @@ pub const Class = enum(u8) {
     pub fn character(class_: Class) u8 {
         return switch (class_) {
             // pawns aren't notated but we may want to use these to render
-            // is a terminal doesn't support Unicode
+            // if a terminal doesn't support Unicode
             .pawn => 'P',
             .knight => 'N',
             .bishop => 'B',
@@ -140,44 +138,78 @@ pub const Class = enum(u8) {
 };
 
 /// encodes a pieces class and affiliation
-///  - high nibble is affiliation
-///  - low nibble is class
-bits: u8,
+/// bits 0-3: class
+/// bit 4: affiliation, 0 = white
+/// bit 5: empty flag, 0 = empty
+bits: Bitfield(u6),
 
-/// init piece from a class and affiliation
+const offset_empty = 5;
+const offset_affiliation = 4;
+const offset_class = 0;
+
+/// create piece from a class and affiliation
 pub fn init(class_: Class, affiliation_: Affiliation) Piece {
+    var this = Piece{ .bits = .{} };
+    this.bits.set(u1, offset_empty, @boolToInt(true)); // true mean no empty
+    this.bits.set(u1, offset_affiliation, @enumToInt(affiliation_));
+    this.bits.set(u4, offset_class, @enumToInt(class_));
+    return this;
+}
+
+/// create piece from encoded bit field
+/// bits 0-3: class
+/// bit 4: affiliation, 0 = white
+/// bit 5: empty flag, 0 = empty
+pub fn fromBits(bits: u6) Piece {
     return .{
-        .bits = (@enumToInt(affiliation_) << 4) | @enumToInt(class_),
+        .bits = .{ .bits = bits },
     };
 }
 
+/// return empty piece
+pub fn empty() Piece {
+    return .{ .bits = .{} };
+}
+
+/// return if piece is empty
+pub fn isEmpty(piece: Piece) bool {
+    return piece.bits.bits == 0;
+}
+
 /// return piece's class
-pub fn class(piece: Piece) Class {
-    return @intToEnum(Class, piece.bits & 0b01111);
+pub fn class(piece: Piece) ?Class {
+    return if (piece.isEmpty())
+        null
+    else
+        @intToEnum(Class, piece.bits.get(u4, offset_class));
 }
 
 /// return piece's affiliation
-pub fn affiliation(piece: Piece) Affiliation {
-    return @intToEnum(Affiliation, piece.bits >> 4);
+pub fn affiliation(piece: Piece) ?Affiliation {
+    return if (piece.isEmpty())
+        null
+    else
+        @intToEnum(Affiliation, piece.bits.get(u1, offset_affiliation));
 }
 
 /// return piece's material value
 pub fn value(piece: Piece) i32 {
-    return piece.class().value();
+    return (piece.class() orelse return 0).value();
 }
 
 /// return character used to denote class in move notation
 pub fn character(piece: Piece) u8 {
-    return piece.class().character();
+    return (piece.class() orelse return ' ').character();
 }
 
 /// return ascii art for class
 pub fn ascii(piece: Piece) []const u8 {
-    return piece.class().ascii();
+    return (piece.class() orelse return "").ascii();
 }
 
 /// return Unicode symbol used to render piece
 pub fn symbol(piece: Piece) []const u8 {
+    if (piece.isEmpty()) return " ";
     if (piece.affiliation() == .black)
         return switch (piece.class()) {
             .pawn => "♟",
@@ -198,12 +230,12 @@ pub fn symbol(piece: Piece) []const u8 {
         };
 }
 
-/// compare piece with class and affiliation for equality
-pub fn eq(piece: Piece, class_: Class, affiliation_: Affiliation) bool {
-    return piece.bits == Piece.init(class_, affiliation_).bits;
+/// compare two pieces for equality
+pub fn eql(lpiece: Piece, rpiece: Piece) bool {
+    return lpiece.bits.bits == rpiece.bits.bits;
 }
 
-/// compare piece with class and affiliation for inequality
-pub fn neq(piece: Piece, class_: Class, affiliation_: Affiliation) bool {
-    return !piece.eq(class_, affiliation_);
+/// compare piece with class and affiliation for equality
+pub fn is(piece: Piece, class_: Class, affiliation_: Affiliation) bool {
+    return Piece.init(class_, affiliation_).eql(piece);
 }
