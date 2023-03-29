@@ -36,7 +36,11 @@ pub const Rank = enum(i8) {
     }
 
     pub fn iterator(rank: Rank) EnumIterator(Rank) {
-        return EnumIterator(Rank).init(rank);
+        return EnumIterator(Rank).init(rank, .forward);
+    }
+
+    pub fn reverseIterator(rank: Rank) EnumIterator(Rank) {
+        return EnumIterator(Rank).init(rank, .reverse);
     }
 };
 
@@ -64,7 +68,11 @@ pub const File = enum(i8) {
     }
 
     pub fn iterator(file: File) EnumIterator(File) {
-        return EnumIterator(File).init(file);
+        return EnumIterator(File).init(file, .forward);
+    }
+
+    pub fn reverseIterator(file: File) EnumIterator(File) {
+        return EnumIterator(File).init(file, .reverse);
     }
 };
 

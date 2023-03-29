@@ -7,24 +7,46 @@
 const std = @import("std");
 
 /// Iterates through fields in an enum
-pub fn EnumIterator(comptime T: type) type {
-    std.debug.assert(@typeInfo(T) == .Enum); // EnumIterator, T must be an enum
+pub fn EnumIterator(comptime E: type) type {
+    std.debug.assert(@typeInfo(E) == .Enum); // EnumIterator, T must be an enum
+    const size = std.meta.fields(E).len;
+    const T = std.meta.Tag(E);
     return struct {
-        i: std.meta.Tag(T) = 0,
+        i: T = 0,
+        dir: Direction,
 
-        pub fn init(initial: T) @This() {
+        pub const Direction = enum { reverse, forward };
+
+        pub fn init(initial: E, direction: Direction) @This() {
             return .{
                 .i = @enumToInt(initial),
+                .dir = direction,
             };
         }
 
-        pub fn next(this: *@This()) ?T {
-            if (this.i >= 8)
+        pub fn next(this: *@This()) ?E {
+            if (this.i < 0 or this.i >= size)
                 return null;
-            defer this.i += 1;
-            return @intToEnum(T, this.i);
+            defer {
+                switch (this.dir) {
+                    .reverse => this.i -%= 1,
+                    .forward => this.i += 1,
+                }
+            }
+            return @intToEnum(E, this.i);
         }
     };
+}
+
+test "EnumIterator" {
+    const E = enum(u8) { one, two, three };
+
+    var iter = EnumIterator(E, true).init(.three);
+
+    try std.testing.expectEqual(@as(?E, E.three), iter.next());
+    try std.testing.expectEqual(@as(?E, E.two), iter.next());
+    try std.testing.expectEqual(@as(?E, E.one), iter.next());
+    try std.testing.expectEqual(@as(?E, null), iter.next());
 }
 
 /// Allows getting and setting bit ranges in an unsigned integer
@@ -58,14 +80,14 @@ pub fn Bitfield(comptime T: type) type {
 
 test "Bitfield" {
     var bits = Bitfield(u32){ .bits = @as(u32, 0b0000011000000000) };
-    bits.set(8, @as(u8, 6));
+    bits.set(u8, 8, 6);
     try std.testing.expectEqual(@as(u32, 0b11000000000), bits.bits);
     try std.testing.expectEqual(@as(u32, 0b1111111100000000), Bitfield(u32).mask(8, 8));
     try std.testing.expectEqual(@as(u8, 0), bits.get(u8, 0));
     try std.testing.expectEqual(@as(u8, 6), bits.get(u8, 8));
     try std.testing.expectEqual(@as(u8, 96), bits.get(u8, 4));
-    bits.set(5, @as(u16, 6969));
-    bits.set(0, @as(u5, 16));
+    bits.set(u16, 5, 6969);
+    bits.set(u5, 0, 16);
     try std.testing.expectEqual(@as(u16, 6969), bits.get(u16, 5));
     try std.testing.expectEqual(@as(u5, 16), bits.get(u5, 0));
 }

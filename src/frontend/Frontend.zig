@@ -52,6 +52,10 @@ const commands = std.ComptimeStringMap(Command, .{
         .impl = cmdDraw,
         .help = "offer a draw to your opponent",
     } },
+    .{ "/flip", .{
+        .impl = cmdFlip,
+        .help = "flip the board perspective",
+    } },
 
     .{ "/clear", .{
         .impl = cmdClear,
@@ -216,6 +220,24 @@ pub fn affiliatedColor(this: Frontend) zcon.Color {
     };
 }
 
+/// return an iterator that iterates over files
+/// in order to be rendered from left to right
+pub fn fileIterator(this: Frontend) chess.util.EnumIterator(chess.File) {
+    return switch (this.player_affiliation) {
+        .white => chess.File.file_a.iterator(),
+        .black => chess.File.file_h.reverseIterator(),
+    };
+}
+
+/// return an iterator that iterates over ranks
+/// in order to be rendered from top to bottom
+pub fn rankIterator(this: Frontend) chess.util.EnumIterator(chess.Rank) {
+    return switch (this.player_affiliation) {
+        .white => chess.Rank.rank_8.reverseIterator(),
+        .black => chess.Rank.rank_1.iterator(),
+    };
+}
+
 /// determines if input is a / command
 pub fn isCommand(input: []const u8) bool {
     return input.len >= 1 and input[0] == '/';
@@ -289,6 +311,12 @@ fn cmdDraw(this: *Frontend, args: *ArgIterator) []const u8 {
         return "#byel draw by agreement";
     }
     return "yeah yeah, just make a move";
+}
+
+fn cmdFlip(this: *Frontend, args: *ArgIterator) []const u8 {
+    _ = args;
+    this.player_affiliation = this.player_affiliation.opponent();
+    return this.confirmationStatus();
 }
 
 fn cmdResign(this: *Frontend, args: *ArgIterator) []const u8 {
@@ -385,7 +413,7 @@ fn confirmationStatus(this: *Frontend) []const u8 {
 
 fn statusFromMoveResult(this: *Frontend, move_result: chess.Move.Result, input: []const u8) []const u8 {
     return switch (move_result) {
-        .ok => "#bgrn ok",
+        .ok => this.confirmationStatus(),
         .ok_en_passant => "#bgrn En Passant!",
         .ok_check => "#bgrn check!",
         .ok_mate => this.winStatus(),

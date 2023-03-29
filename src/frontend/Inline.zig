@@ -18,7 +18,6 @@ const Frontend = @import("Frontend.zig");
 const render_height = 20;
 /// characters wide the rendering area is
 const render_width = 128;
-const file_line = "#dgry   a b c d e f g h \n";
 const col_white = zcon.Color.col16(.bright_yellow);
 const col_black = zcon.Color.col16(.bright_cyan);
 const col_light_sq = zcon.Color.col16(.yellow);
@@ -75,33 +74,42 @@ fn renderBoard(this: @This(), writer: *zcon.Writer) !void {
     const white_advantage = white_material - black_material;
 
     this.drawCaptured(writer, .black, black_advantage);
+    this.drawFileLine(writer);
 
-    writer.put(file_line);
-    var rankv: i8 = 7; // Rank 8
-    while (rankv >= 0) : (rankv -= 1) {
-        writer.fmt("#dgry {} ", .{rankv + 1});
-        var file_iter = chess.File.file_a.iterator();
+    var rank_iter = this.frontend.rankIterator();
+    while (rank_iter.next()) |rank| {
+        writer.fmt("#dgry {} ", .{rank.val() + 1});
+        var file_iter = this.frontend.fileIterator();
         while (file_iter.next()) |file| {
-            const coord = chess.Coordinate.from2d(file, chess.Rank.init(rankv));
+            const coord = chess.Coordinate.from2d(file, rank);
             const piece = this.frontend.position.at(coord);
             if (!piece.isEmpty()) {
                 setAffiliatedColor(writer, piece.affiliation().?);
                 writer.fmt("#b{u}#b:off; ", .{piece.character()});
                 writer.usePreviousColor();
             } else {
-                setSquareColor(writer, file.val(), rankv);
+                setSquareColor(writer, file, rank);
                 writer.put("#d:*; ");
                 writer.useDefaultColors();
             }
         }
-        writer.fmt("#dgry {}\n", .{rankv + 1});
+        writer.fmt("#dgry {}\n", .{rank.val() + 1});
     }
-    writer.put(file_line);
+
+    this.drawFileLine(writer);
     writer.putChar('\n');
-
     this.drawCaptured(writer, .white, white_advantage);
-
     writer.useDefaultColors();
+}
+
+/// draw file letters on board edges
+fn drawFileLine(this: @This(), writer: *zcon.Writer) void {
+    writer.put("#dgry;  ");
+    var file_iter = this.frontend.fileIterator();
+    while (file_iter.next()) |file| {
+        writer.fmt("{c} ", .{'a' + @intCast(u8, file.val())});
+    }
+    writer.put("\n");
 }
 
 /// draw the line of captured pieces and points of material
@@ -123,8 +131,8 @@ fn setAffiliatedColor(writer: *zcon.Writer, affiliation: chess.Affiliation) void
     });
 }
 
-fn setSquareColor(writer: *zcon.Writer, file: i8, rank: i8) void {
-    if (@rem(file + rank, 2) != 0)
+fn setSquareColor(writer: *zcon.Writer, file: chess.Coordinate.File, rank: chess.Coordinate.Rank) void {
+    if (@rem(file.val() + rank.val(), 2) != 0)
         writer.setForeground(col_light_sq)
     else
         writer.setForeground(col_dark_sq);

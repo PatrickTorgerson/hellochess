@@ -4,6 +4,8 @@
 //  MIT license, see LICENSE for more information
 // *******************************************************
 
+pub const util = @import("hellochess/util.zig");
+
 pub const Piece = @import("hellochess/Piece.zig");
 pub const Position = @import("hellochess/Position.zig");
 pub const Coordinate = @import("hellochess/Coordinate.zig");
