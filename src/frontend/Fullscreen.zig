@@ -63,15 +63,10 @@ pub fn drawBoard(this: @This(), writer: *zcon.Writer) !void {
                 else
                     col_dark_square,
             );
-
-            writer.drawAt(
-                .{
-                    .x = square_width * file.val() + 4,
-                    .y = square_height * (7 - rank.val()) + 2,
-                },
-                "{s}",
-                .{ascii.empty},
-            );
+            writer.drawAt(.{
+                .x = square_width * file.val() + 4,
+                .y = square_height * (7 - rank.val()) + 2,
+            }, "{s}", .{ascii.empty});
             writer.fmt("{s}", .{chess.Coordinate.from2d(file, rank).toString()});
 
             const piece = this.frontend.position.at(chess.Coordinate.from2d(file, rank));
@@ -82,14 +77,10 @@ pub fn drawBoard(this: @This(), writer: *zcon.Writer) !void {
                     else
                         col_dark_piece,
                 );
-                writer.drawAt(
-                    .{
-                        .x = square_width * file.val() + 4,
-                        .y = square_height * (7 - rank.val()) + 2,
-                    },
-                    "{s}",
-                    .{piece.ascii()},
-                );
+                writer.drawAt(.{
+                    .x = square_width * file.val() + 4,
+                    .y = square_height * (7 - rank.val()) + 2,
+                }, "{s}", .{piece.ascii()});
             }
         }
     }

@@ -92,6 +92,8 @@ should_exit: bool,
 win_state: WinState = .ongoing,
 /// a player offers a draw
 draw_offered: ?chess.Affiliation = null,
+col_white: zcon.Color = zcon.Color.col16(.white),
+col_black: zcon.Color = zcon.Color.col16(.white),
 
 // TODO: fields for network connection
 
@@ -148,7 +150,9 @@ pub fn tryMove(this: *Frontend, move: []const u8) bool {
 /// prompts client player for input, makes moves, and handles commands
 pub fn clientMove(this: *Frontend, writer: *zcon.Writer) ![]const u8 {
     writer.clearLine();
+    writer.setForeground(this.affiliatedColor());
     writer.fmt(" > {s}: ", .{this.promptText()});
+    writer.usePreviousColor();
     writer.flush();
 
     const input = try this.readInput();
@@ -196,12 +200,20 @@ pub fn getLastInput(this: *Frontend) []const u8 {
 /// returns prompt text for given affiliation
 pub fn promptText(this: Frontend) []const u8 {
     if (this.win_state != .ongoing)
-        return "play again? (y,n)#def"
+        return "play again? (y,n)"
     else
         return switch (this.position.side_to_move) {
-            .white => "#cyn white to move #def",
-            .black => "#yel black to move #def",
+            .white => "white to move",
+            .black => "black to move",
         };
+}
+
+/// return text color for current side to move
+pub fn affiliatedColor(this: Frontend) zcon.Color {
+    return switch (this.position.side_to_move) {
+        .white => this.col_white,
+        .black => this.col_black,
+    };
 }
 
 /// determines if input is a / command
@@ -373,24 +385,24 @@ fn confirmationStatus(this: *Frontend) []const u8 {
 
 fn statusFromMoveResult(this: *Frontend, move_result: chess.Move.Result, input: []const u8) []const u8 {
     return switch (move_result) {
-        .ok => "#grn ok",
-        .ok_en_passant => "#grn En Passant!",
-        .ok_check => "#grn check!",
+        .ok => "#bgrn ok",
+        .ok_en_passant => "#bgrn En Passant!",
+        .ok_check => "#bgrn check!",
         .ok_mate => this.winStatus(),
         .ok_stalemate => "#wht draw",
         .ok_repitition => "#wht draw",
         .ok_insufficient_material => "#wht draw",
         .bad_notation => this.badNotationStatus(input),
-        .bad_disambiguation => "#red no such piece on specified rank or file",
-        .ambiguous_piece => "#red ambiguous move",
-        .no_such_piece => "#red no such piece",
-        .no_visibility => "#red that piece can't move there",
-        .in_check => "#red you are in check",
-        .enters_check => "#red you cannot put yourself in check",
-        .blocked => "#red there is a piece in your way",
-        .bad_castle_in_check => "#red cannot castle out of check",
-        .bad_castle_through_check => "#red cannot castle through check",
-        .bad_castle_king_or_rook_moved => "#red you have already moved your king or rook",
+        .bad_disambiguation => "#bred no such piece on specified rank or file",
+        .ambiguous_piece => "#bred ambiguous move",
+        .no_such_piece => "#bred no such piece",
+        .no_visibility => "#bred that piece can't move there",
+        .in_check => "#bred you are in check",
+        .enters_check => "#bred you cannot put yourself in check",
+        .blocked => "#bred there is a piece in your way",
+        .bad_castle_in_check => "#bred cannot castle out of check",
+        .bad_castle_through_check => "#bred cannot castle through check",
+        .bad_castle_king_or_rook_moved => "#bred you have already moved your king or rook",
     };
 }
 

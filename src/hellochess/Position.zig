@@ -353,16 +353,16 @@ pub const Query = struct {
     source_file: ?File = null,
     /// search for pieces on this rank
     source_rank: ?Rank = null,
-    /// query board position as if this move was made
+    /// query position as if this move was made
     hypothetical_move: ?Move = null,
     /// exclude kings from results
     exclude_king: bool = false,
 };
 
-/// query's the board of pieces
-/// /param buffer buffer to write results to
-/// /param query_expr constraints to search for
-/// /returns slice into `buffer` containing 1d coordinates of matching pieces
+/// query's the position for pieces meeting constraints defined in `query_expr`
+/// **buffer:** buffer to write results to
+/// **query_expr:** constraints to search for
+/// **returns:** slice into `buffer` containing 1d coordinates of matching pieces
 pub fn query(position: Position, buffer: *[32]Coordinate, query_expr: Query) []const Coordinate {
     var count: usize = 0;
 

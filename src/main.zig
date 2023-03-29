@@ -43,7 +43,7 @@ pub fn parseCli(writer: *zcon.Writer) !bool {
     cli.input_callback = input;
     cli.help_callback = help;
 
-    return try cli.parse(options);
+    return try cli.parse(options); // yo
 }
 
 /// callback to handle command line options
