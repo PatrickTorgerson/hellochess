@@ -63,6 +63,24 @@ pub const File = enum(i8) {
         return @enumToInt(file);
     }
 
+    /// returns file just left of `file`
+    /// returns null if `file` is a
+    pub fn west(file: File) ?File {
+        return switch (file) {
+            .file_a => null,
+            else => @intToEnum(File, @enumToInt(file) - 1),
+        };
+    }
+
+    /// returns file just right of `file`
+    /// returns null if `file` is h
+    pub fn east(file: File) ?File {
+        return switch (file) {
+            .file_h => null,
+            else => @intToEnum(File, @enumToInt(file) + 1),
+        };
+    }
+
     pub fn index(file: File) usize {
         return @intCast(usize, file.val());
     }
@@ -128,9 +146,117 @@ pub const Direction = enum(u3) {
         };
     }
 
+    /// return direction just left of `dir`
+    /// towards file a
+    pub fn toWest(dir: Direction) Direction {
+        return switch (dir) {
+            .north => .northwest,
+            .south => .southwest,
+            .east => .west,
+            .west => .west,
+            .northeast => .north,
+            .northwest => .west,
+            .southeast => .south,
+            .southwest => .west,
+        };
+    }
+
+    /// return direction just right of `dir`
+    /// towards file h
+    pub fn toEast(dir: Direction) Direction {
+        return switch (dir) {
+            .north => .northeast,
+            .south => .southeast,
+            .east => .east,
+            .west => .east,
+            .northeast => .east,
+            .northwest => .north,
+            .southeast => .east,
+            .southwest => .south,
+        };
+    }
+
     /// returns enum value as usize
     pub fn asUsize(dir: Direction) usize {
         return @intCast(usize, @enumToInt(dir));
+    }
+};
+
+/// iterates over squares in a given direction
+pub const DirectionalIterator = struct {
+    at: Coordinate,
+    dir: Direction,
+    count: i8,
+    i: i8,
+
+    /// create an iterater to iterate over `count` squares in direction `dir`
+    /// starting at `source` exclusive. If the edge of board is reached,
+    /// stop iterating
+    pub fn init(source: Coordinate, dir: Direction, count: i8) DirectionalIterator {
+        return .{
+            .at = source,
+            .dir = dir,
+            .count = count,
+            .i = 0,
+        };
+    }
+
+    /// create an iterater to iterate over squares between
+    /// `source` and `dest` exclusive. if `source` and `dest`
+    /// are not on the same orthoganal or diagonal
+    /// return error.out_of_line
+    /// If the edge of board is reached, stop iterating
+    pub fn initWithDest(source: Coordinate, dest: Coordinate) !DirectionalIterator {
+        const rank_diff = dest.getRank().val() - source.getRank().val();
+        const file_diff = dest.getFile().val() - source.getFile().val();
+
+        if (rank_diff != 0 and
+            file_diff != 0 and
+            rank_diff != file_diff)
+            return error.out_of_line;
+
+        if (rank_diff == 0 and file_diff == 0)
+            return DirectionalIterator.init(source, .north, 0);
+
+        const dir: Direction =
+            if (rank_diff == 0 and file_diff > 0)
+            .east
+        else if (rank_diff == 0 and file_diff < 0)
+            .west
+        else if (rank_diff > 0 and file_diff == 0)
+            .north
+        else if (rank_diff < 0 and file_diff == 0)
+            .south
+        else if (rank_diff > 0 and file_diff > 0)
+            .northeast
+        else if (rank_diff < 0 and file_diff < 0)
+            .southwest
+        else if (rank_diff > 0 and file_diff < 0)
+            .northwest
+        else if (rank_diff < 0 and file_diff > 0)
+            .southeast
+        else
+            unreachable;
+
+        const length = std.math.sqrt(@intCast(u8, rank_diff * rank_diff + file_diff * file_diff));
+
+        return DirectionalIterator.init(source, dir, @intCast(i8, length) - 1);
+    }
+
+    pub fn next(iter: *DirectionalIterator) ?Coordinate {
+        if (iter.i >= iter.count)
+            return null;
+        iter.at = iter.at.offsettedDir(iter.dir, 1) orelse return null;
+        iter.i += 1;
+        return iter.at;
+    }
+
+    /// divide n / d rounding away from zero
+    fn div(n: i8, d: i8) i8 {
+        const quotiant = @intToFloat(f32, n) / @intToFloat(f32, d);
+        const sign = std.math.sign(quotiant);
+        const val = @fabs(quotiant);
+        return @floatToInt(i8, @ceil(val) * sign);
     }
 };
 
@@ -199,7 +325,7 @@ pub fn eql(coord: Coordinate, other: Coordinate) bool {
 /// offset coord `amt` squares in direction `dir`
 /// if offest would leave coord off board, clamp values
 /// such that coord gets left on the edge of board
-/// returns whether coord was clamped due to bounds failure
+/// returns false if coord was clamped due to bounds failure
 pub fn offsetDir(coord: *Coordinate, dir: Direction, amt: i8) bool {
     const multiplier = std.math.min(amt, squares_to_edge[coord.index()][dir.asUsize()]);
     coord.value += dir.offset() * multiplier;
@@ -209,7 +335,7 @@ pub fn offsetDir(coord: *Coordinate, dir: Direction, amt: i8) bool {
 /// offset coord rank and file
 /// if offest would leave coord off board, clamp values
 /// such that coord gets left on the edge of board
-/// returns whether coord was clamped due to bounds failure
+/// returns false if coord was clamped due to bounds failure
 pub fn offset(coord: *Coordinate, file_offset: i8, rank_offset: i8) bool {
     const capped_file_offset = if (file_offset > 0)
         std.math.min(file_offset, squares_to_edge[coord.index()][Direction.east.asUsize()])
@@ -243,6 +369,17 @@ pub fn offsetted(coord: Coordinate, file_offset: i8, rank_offset: i8) ?Coordinat
         new_coord
     else
         null;
+}
+
+/// returns a new coord offsetted relative
+/// to a given coord by it's 1d value
+/// if resulting coord is off board, return null
+pub fn offsettedVal(coord: *Coordinate, amt: i8) ?Coordinate {
+    var new_coord = coord;
+    new_coord.value += amt;
+    // TODO: bounds checking
+    if (!new_coord.valid()) return null;
+    return new_coord;
 }
 
 /// return file from standard chess file letter ascii

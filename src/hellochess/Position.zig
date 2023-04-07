@@ -11,25 +11,34 @@ const Notation = @import("Notation.zig");
 const Coordinate = @import("Coordinate.zig");
 const Move = @import("Move.zig");
 const Meta = @import("Meta.zig");
+const Bitboard = @import("Bitboard.zig");
 
 const Class = Piece.Class;
 const Affiliation = Piece.Affiliation;
 const File = Coordinate.File;
 const Rank = Coordinate.Rank;
+const DirectionalIterator = Coordinate.DirectionalIterator;
 
 const Position = @This();
 
 /// the 64 squares of a chess board laid out a rank 1 to 8 file a to h
 /// see Coordinate.to1d and Coordinate.from_1d for mapping
 squares: [64]Piece,
+/// stores castling rights, en passant target,
+/// move counter, and last captured piece
 meta: Meta,
-white_king: Coordinate = Coordinate.e1,
-black_king: Coordinate = Coordinate.e8,
+/// cached king coords
+kings: [2]Coordinate = .{ Coordinate.e1, Coordinate.e8 },
+/// cached piece coords per affiliation
+pieces: [2]Bitboard,
 side_to_move: Affiliation,
 /// number of half moves played so far
 ply: i32 = 0,
 /// number of half moves since last capture or pawn move
 fifty_move_counter: i32 = 0,
+
+const initial_white_bits: u64 = 0xc0c0c0c0c0c0c0c0;
+const initial_black_bits: u64 = 0x0303030303030303;
 
 /// create an empty position, with only kings
 pub fn initEmpty() Position {
@@ -37,6 +46,7 @@ pub fn initEmpty() Position {
         .squares = [1]Piece{Piece.empty()} ** 64,
         .meta = Meta.initEmpty(),
         .side_to_move = .white,
+        .pieces = .{ Bitboard.init(), Bitboard.init() },
     };
     this.squares[Affiliation.white.kingCoord().index()] = Piece.init(.king, .white);
     this.squares[Affiliation.black.kingCoord().index()] = Piece.init(.king, .black);
@@ -49,10 +59,11 @@ pub fn init() Position {
         .squares = starting_position,
         .meta = Meta.init(.{}),
         .side_to_move = .white,
+        .pieces = .{ Bitboard.fromInt(initial_white_bits), Bitboard.fromInt(initial_black_bits) },
     };
 }
 
-/// return a duplicate of position
+/// return a duplicate of `position`
 pub fn dupe(position: Position) Position {
     return position;
 }
@@ -64,10 +75,12 @@ pub fn at(position: Position, pos: Coordinate) Piece {
 
 /// returns coord of current side to move's king
 pub fn kingCoord(position: Position) Coordinate {
-    return switch (position.side_to_move) {
-        .white => position.white_king,
-        .black => position.black_king,
-    };
+    return position.kings[position.side_to_move.index()];
+}
+
+/// return bitboard of affiliated pieces
+pub fn piecesFromAffiliation(position: Position, affiliation: Affiliation) Bitboard {
+    return position.pieces[affiliation.index()];
 }
 
 /// counts material value for given affiliation
@@ -117,12 +130,10 @@ pub fn writeCapturedPieces(position: Position, writer: anytype, affiliation: Aff
 pub fn spawn(position: *Position, class: Class, coord: Coordinate) Move.Result {
     const piece = Piece.init(class, position.side_to_move);
     position.squares[coord.index()] = piece;
+    position.pieces[position.side_to_move.index()].set(coord, true);
     if (class == .king) {
         position.squares[position.kingCoord().index()] = Piece.empty();
-        switch (position.side_to_move) {
-            .white => position.white_king = coord,
-            .black => position.black_king = coord,
-        }
+        position.kings[position.side_to_move.index()] = coord;
         if (coord.eql(position.side_to_move.kingCoord())) {
             if (position.squares[position.side_to_move.aRookCoord().index()].is(.rook, position.side_to_move))
                 position.meta.setCastleQueen(position.side_to_move, true);
@@ -149,10 +160,7 @@ pub fn doMove(position: *Position, move: Move) void {
     position.meta.setEnpassantFile(null);
 
     if (piece.class().? == .king) {
-        switch (position.side_to_move) {
-            .white => position.white_king = move.dest(),
-            .black => position.black_king = move.dest(),
-        }
+        position.kings[position.side_to_move.index()] = move.dest();
         position.meta.setCastleKing(position.side_to_move, false);
         position.meta.setCastleQueen(position.side_to_move, false);
     }
@@ -186,6 +194,8 @@ pub fn doMove(position: *Position, move: Move) void {
         else => unreachable,
     }
 
+    position.pieces[position.side_to_move.index()].set(move.source(), false);
+    position.pieces[position.side_to_move.index()].set(move.dest(), true);
     position.squares[move.source().index()] = Piece.empty();
     position.squares[move.dest().index()] = piece;
     position.ply += 1;
@@ -248,7 +258,9 @@ pub fn submitMove(position: *Position, move_notation: []const u8) Move.Result {
 
     var move_flag: Move.Flag = .none;
 
-    if (position.at(source).class().? == .pawn and notation.destination.getRank() == position.side_to_move.opponent().backRank()) {
+    if (position.at(source).class().? == .pawn and
+        notation.destination.getRank() == position.side_to_move.opponent().backRank())
+    {
         const promote_to: Class = notation.promote_to orelse .queen;
         move_flag = switch (promote_to) {
             .knight => .promote_knight,
@@ -318,7 +330,7 @@ pub fn castle(position: *Position, kingside: bool) Move.Result {
 
     // cannot castle through check
     const file_delta: i8 = if (kingside) 3 else -4;
-    var iter = DirectionalIterator.init(position.kingCoord(), position.kingCoord().offsetted(file_delta, 0).?);
+    var iter = DirectionalIterator.initWithDest(position.kingCoord(), position.kingCoord().offsetted(file_delta, 0).?) catch unreachable;
     while (iter.next()) |coord| {
         if (!position.at(coord).isEmpty())
             return .blocked;
@@ -461,7 +473,9 @@ fn hasVisability(position: *Position, source: Coordinate, dest: Coordinate, atta
                     (dfile == sfile + 1 or dfile == sfile - 1);
             } else {
                 // double push
-                if (drank == affiliation.doublePushRank().val() and srank == affiliation.secondRank().val()) {
+                if (drank == affiliation.doublePushRank().val() and
+                    srank == affiliation.secondRank().val())
+                {
                     return dfile == sfile and
                         position.at(source.offsettedDir(affiliation.direction(), 1).?).isEmpty() and
                         position.at(dest).isEmpty();
@@ -470,7 +484,9 @@ fn hasVisability(position: *Position, source: Coordinate, dest: Coordinate, atta
                 if (dfile == sfile and drank == srank + affiliation.direction().offset())
                     return position.at(dest).isEmpty();
                 // captures
-                if ((dfile == sfile + 1 or dfile == sfile - 1) and drank == srank + affiliation.direction().offset()) {
+                if ((dfile == sfile + 1 or dfile == sfile - 1) and
+                    drank == srank + affiliation.direction().offset())
+                {
                     if (position.at(dest).isEmpty()) {
                         // en passant
                         const coord = dest.offsettedDir(affiliation.reverseDirection(), 1).?;
@@ -527,7 +543,7 @@ fn hasVisability(position: *Position, source: Coordinate, dest: Coordinate, atta
 
 /// ensures all squares between source and dest are empty
 fn ensureEmpty(position: Position, source: Coordinate, dest: Coordinate) bool {
-    var iter = DirectionalIterator.init(source, dest);
+    var iter = DirectionalIterator.initWithDest(source, dest) catch unreachable;
     while (iter.next()) |coord| {
         if (!position.at(coord).isEmpty())
             return false;
@@ -562,7 +578,9 @@ fn isMate(position: *Position) bool {
             if (rank.val() > rank_end) break;
             const coord = Coordinate.from2d(file, rank);
             // empty or enemy piece
-            if (position.at(coord).isEmpty() or position.at(coord).affiliation().? == position.side_to_move.opponent()) {
+            if (position.at(coord).isEmpty() or
+                position.at(coord).affiliation().? == position.side_to_move.opponent())
+            {
                 const attackers = position.query(&buffer, .{
                     .affiliation = position.side_to_move.opponent(),
                     .attacking = true,
@@ -595,7 +613,7 @@ fn isMate(position: *Position) bool {
         .pawn, .knight, .king => return true,
         else => {},
     }
-    var iter = DirectionalIterator.init(position.kingCoord(), checkers[0]);
+    var iter = DirectionalIterator.initWithDest(position.kingCoord(), checkers[0]) catch unreachable;
     while (iter.next()) |c| {
         const blockers = position.query(&buffer, .{
             .affiliation = position.side_to_move,
@@ -625,35 +643,6 @@ fn checksAndMates(position: *Position) Move.Result {
     }
     return .ok;
 }
-
-/// iterates over squares between two coords exclusive
-const DirectionalIterator = struct {
-    dest: Coordinate,
-    at: Coordinate,
-    delta_file: i8,
-    delta_rank: i8,
-
-    pub fn init(source: Coordinate, dest: Coordinate) DirectionalIterator {
-        const rank_diff = dest.getRank().val() - source.getRank().val();
-        const file_diff = dest.getFile().val() - source.getFile().val();
-        const length = std.math.sqrt(@intCast(u8, rank_diff * rank_diff + file_diff * file_diff));
-        const rank_delta = std.math.clamp(div(rank_diff, length), -1, 1);
-        const file_delta = std.math.clamp(div(file_diff, length), -1, 1);
-        return .{
-            .dest = dest,
-            .at = source,
-            .delta_file = file_delta,
-            .delta_rank = rank_delta,
-        };
-    }
-
-    pub fn next(iter: *DirectionalIterator) ?Coordinate {
-        if (!iter.at.offset(iter.delta_file, iter.delta_rank))
-            return null;
-        if (iter.at.value == iter.dest.value) return null;
-        return iter.at;
-    }
-};
 
 /// divide n / d rounding away from zero
 fn div(n: i8, d: i8) i8 {

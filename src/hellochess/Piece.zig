@@ -16,6 +16,11 @@ pub const Affiliation = enum(u1) {
     white = 0,
     black = 1,
 
+    /// returns enum value as usize
+    pub fn index(affiliation_: Affiliation) usize {
+        return @intCast(usize, @enumToInt(affiliation_));
+    }
+
     /// returns other affiliation
     pub fn opponent(affiliation_: Affiliation) Affiliation {
         return switch (affiliation_) {
@@ -85,10 +90,27 @@ pub const Affiliation = enum(u1) {
         };
     }
 
+    /// return initial square of the affiliated king
     pub fn kingCoord(affiliation_: Affiliation) Coordinate {
         return switch (affiliation_) {
             .white => Coordinate.e1,
             .black => Coordinate.e8,
+        };
+    }
+
+    /// return initial square of the affiliated king
+    pub fn kingCastleDest(affiliation_: Affiliation) Coordinate {
+        return switch (affiliation_) {
+            .white => Coordinate.g1,
+            .black => Coordinate.g8,
+        };
+    }
+
+    /// return initial square of the affiliated king
+    pub fn queenCastleDest(affiliation_: Affiliation) Coordinate {
+        return switch (affiliation_) {
+            .white => Coordinate.c1,
+            .black => Coordinate.c8,
         };
     }
 };
@@ -228,6 +250,15 @@ pub fn symbol(piece: Piece) []const u8 {
             .queen => "♕",
             .king => "♔",
         };
+}
+
+/// returns true if piece's affiliation matches `affiliation_`
+/// returns false is piece is empty
+pub fn isAffiliated(piece: Piece, affiliation_: Affiliation) bool {
+    return if (piece.isEmpty())
+        false
+    else
+        @intToEnum(Affiliation, piece.bits.get(u1, offset_affiliation)) == affiliation_;
 }
 
 /// compare two pieces for equality

@@ -12,13 +12,17 @@ const Bitfield = @import("util.zig").Bitfield;
 
 pub const Flag = enum(u4) {
     none = 0,
-    promote_queen,
-    promote_rook,
-    promote_bishop,
-    promote_knight,
+
+    // NOTE: values are significant
+    // see `@import("movegen.zig").MoveIterator.nextPawn`
+    promote_queen = 1,
+    promote_rook = 2,
+    promote_bishop = 3,
+    promote_knight = 4,
+
     enpassant_capture,
-    castle,
     pawn_double_push,
+    castle,
 };
 
 const Move = @This();
@@ -40,6 +44,10 @@ pub fn init(source_: Coordinate, dest_: Coordinate, flag_: Flag) Move {
     this.bits.set(u6, offset_dest, @intCast(u6, dest_.value));
     this.bits.set(u4, offset_flag, @enumToInt(flag_));
     return this;
+}
+
+pub fn setFlag(move: Move, flag_: Flag) void {
+    move.bits.set(u4, offset_flag, @enumToInt(flag_));
 }
 
 /// return source coordinate
