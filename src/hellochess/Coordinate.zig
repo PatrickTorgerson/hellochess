@@ -379,7 +379,7 @@ pub fn offsetted(coord: Coordinate, file_offset: i8, rank_offset: i8) ?Coordinat
 /// returns a new coord offsetted relative
 /// to a given coord by it's 1d value
 /// if resulting coord is off board, return null
-pub fn offsettedVal(coord: *Coordinate, amt: i8) ?Coordinate {
+pub fn offsettedVal(coord: Coordinate, amt: i8) ?Coordinate {
     var new_coord = coord;
     new_coord.value += amt;
     // TODO: bounds checking

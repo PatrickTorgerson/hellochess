@@ -232,8 +232,8 @@ pub fn ascii(piece: Piece) []const u8 {
 /// return Unicode symbol used to render piece
 pub fn symbol(piece: Piece) []const u8 {
     if (piece.isEmpty()) return " ";
-    if (piece.affiliation() == .black)
-        return switch (piece.class()) {
+    if (piece.affiliation().? == .black)
+        return switch (piece.class().?) {
             .pawn => "♟",
             .knight => "♞",
             .bishop => "♝",
@@ -242,7 +242,7 @@ pub fn symbol(piece: Piece) []const u8 {
             .king => "♚",
         }
     else
-        return switch (piece.class()) {
+        return switch (piece.class().?) {
             .pawn => "♙",
             .knight => "♘",
             .bishop => "♗",

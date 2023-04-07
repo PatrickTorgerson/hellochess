@@ -40,11 +40,14 @@ pub fn build(b: *std.build.Builder) void {
     run_step.dependOn(&run_cmd.step);
 
     const exe_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/test.zig" },
+        .name = "hellotests",
+        .root_source_file = .{ .path = "src/hellochess.zig" },
         .target = target,
         .optimize = optimize,
     });
-
+    exe_tests.install();
+    const test_run_cmd = b.addRunArtifact(exe_tests);
+    test_run_cmd.step.dependOn(b.getInstallStep());
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&exe_tests.step);
+    test_step.dependOn(&test_run_cmd.step);
 }

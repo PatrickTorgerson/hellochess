@@ -5,6 +5,7 @@
 // *******************************************************
 
 pub const util = @import("hellochess/util.zig");
+pub const movegen = @import("hellochess/movegen.zig");
 
 pub const Piece = @import("hellochess/Piece.zig");
 pub const Position = @import("hellochess/Position.zig");
@@ -18,3 +19,7 @@ pub const Rank = Coordinate.Rank;
 pub const Direction = Coordinate.Direction;
 pub const Affiliation = Piece.Affiliation;
 pub const Class = Piece.Class;
+
+test {
+    @import("std").testing.refAllDecls(@This());
+}

@@ -46,7 +46,7 @@ pub fn init(source_: Coordinate, dest_: Coordinate, flag_: Flag) Move {
     return this;
 }
 
-pub fn setFlag(move: Move, flag_: Flag) void {
+pub fn setFlag(move: *Move, flag_: Flag) void {
     move.bits.set(u4, offset_flag, @enumToInt(flag_));
 }
 
@@ -83,6 +83,16 @@ pub fn promotion(move: Move) ?Piece.Class {
         .promote_knight => .knight,
         .none, .enpassant_capture, .castle, .pawn_double_push => null,
     };
+}
+
+pub fn format(value: Move, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+    _ = options;
+    _ = fmt;
+    try writer.print("{s}{s}\x1b[90m({s})\x1b[0m", .{
+        value.source().toString(),
+        value.dest().toString(),
+        @tagName(value.flag()),
+    });
 }
 
 /// result of attmpting a move
