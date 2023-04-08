@@ -212,7 +212,7 @@ pub const DirectionalIterator = struct {
 
         if (rank_diff != 0 and
             file_diff != 0 and
-            rank_diff != file_diff)
+            abs(rank_diff) != abs(file_diff))
             return error.out_of_line;
 
         if (rank_diff == 0 and file_diff == 0)
@@ -238,7 +238,7 @@ pub const DirectionalIterator = struct {
         else
             unreachable;
 
-        const length = std.math.sqrt(@intCast(u8, rank_diff * rank_diff + file_diff * file_diff));
+        const length = std.math.max(abs(rank_diff), abs(file_diff));
 
         return DirectionalIterator.init(source, dir, @intCast(i8, length) - 1);
     }
@@ -251,12 +251,13 @@ pub const DirectionalIterator = struct {
         return iter.at;
     }
 
-    /// divide n / d rounding away from zero
-    fn div(n: i8, d: i8) i8 {
-        const quotiant = @intToFloat(f32, n) / @intToFloat(f32, d);
-        const sign = std.math.sign(quotiant);
-        const val = @fabs(quotiant);
-        return @floatToInt(i8, @ceil(val) * sign);
+    /// helper for absolute values
+    /// std.math.absInt() errors when val is minInt()
+    /// as -minInt() is overflow by 1
+    /// we just return maxInt() in this case
+    /// off by one but it's fine don't worry about it
+    fn abs(val: i8) i8 {
+        return std.math.absInt(val) catch std.math.maxInt(i8);
     }
 };
 
