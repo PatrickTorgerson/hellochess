@@ -41,7 +41,7 @@ pub fn EnumIterator(comptime E: type) type {
 test "EnumIterator" {
     const E = enum(u8) { one, two, three };
 
-    var iter = EnumIterator(E, true).init(.three);
+    var iter = EnumIterator(E).init(.three, .reverse);
 
     try std.testing.expectEqual(@as(?E, E.three), iter.next());
     try std.testing.expectEqual(@as(?E, E.two), iter.next());

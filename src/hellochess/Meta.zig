@@ -37,7 +37,7 @@ const InitialValues = struct {
     /// useull for undoing captures
     captured_piece: Piece = Piece.empty(),
     /// half moves made since last capture or pawn move
-    fifty_counter: i32 = 0,
+    fifty_counter: u18 = 0,
 };
 
 /// all data is encoded into this 32 bit integer
@@ -95,8 +95,8 @@ pub fn capturedPiece(meta: Meta) Piece {
     return Piece.fromBits(meta.bits.get(u6, offset_capture));
 }
 
-pub fn fiftyCounter(meta: Meta) i32 {
-    return @intCast(i32, meta.bits.get(u18, offset_fifty));
+pub fn fiftyCounter(meta: Meta) u18 {
+    return meta.bits.get(u18, offset_fifty);
 }
 
 pub fn setCastleKing(meta: *Meta, affiliation: Affiliation, val: bool) void {
@@ -124,6 +124,10 @@ pub fn setCapturedPiece(meta: *Meta, piece: Piece) void {
     meta.bits.set(u6, offset_capture, piece.bits.bits);
 }
 
-pub fn setFiftyCounter(meta: *Meta, val: i32) void {
-    meta.bits.set(u18, offset_fifty, @intCast(u18, val));
+pub fn setFiftyCounter(meta: *Meta, val: u18) void {
+    meta.bits.set(u18, offset_fifty, val);
+}
+
+pub fn incFiftyCounter(meta: *Meta) void {
+    meta.bits.set(u18, offset_fifty, meta.bits.get(u18, offset_fifty) + 1);
 }

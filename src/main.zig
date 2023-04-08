@@ -9,9 +9,11 @@ const zcon = @import("zcon");
 const Frontend = @import("frontend/Frontend.zig");
 const InlineFrontend = @import("frontend/Inline.zig");
 const FullscreenFrontend = @import("frontend/Fullscreen.zig");
+const Position = @import("hellochess/Position.zig");
 
 var use_fullscreen: bool = false;
 var use_dev_commands: bool = false;
+var position = Position.init();
 
 pub fn main() !void {
     var writer = zcon.Writer.init();
@@ -24,9 +26,11 @@ pub fn main() !void {
 
     if (use_fullscreen) {
         var fullscreen = FullscreenFrontend{ .frontend = Frontend.passAndPlay(use_dev_commands) };
+        fullscreen.frontend.position = position;
         try fullscreen.run(&writer);
     } else {
         var @"inline" = InlineFrontend{ .frontend = Frontend.passAndPlay(use_dev_commands) };
+        @"inline".frontend.position = position;
         try @"inline".run(&writer);
     }
 }
@@ -50,13 +54,24 @@ pub fn parseCli(writer: *zcon.Writer) !bool {
 pub fn option(cli: *zcon.Cli) !bool {
     if (cli.isOption("fullscreen")) {
         use_fullscreen = true;
-        return true;
     } else if (cli.isOption("enable-dev-commands")) {
         use_dev_commands = true;
         // TODO: incompatable with network play
-        return true;
+    } else if (cli.isOption("fen")) {
+        const fen = cli.readString() orelse {
+            cli.writer.put("expected fen string\n");
+            return false;
+        };
+        if (fen.len == 0 or fen[0] == '-') {
+            cli.writer.put("expected fen string\n");
+            return false;
+        }
+        position = Position.fromFen(fen) catch {
+            cli.writer.put("invalid fen string\n");
+            return false;
+        };
     }
-    return false;
+    return true;
 }
 
 /// callback to handle non option commandline args
@@ -84,5 +99,11 @@ const options = zcon.Cli.OptionList(.{ .{
     .alias_long = "enable-dev-commands",
     .alias_short = "",
     .desc = "enable access to dev commands",
+    .help = "not sure this is used atm",
+}, .{
+    .alias_long = "fen",
+    .alias_short = "",
+    .desc = "load position from fen string #dgry:<FEN>",
+    .arguments = "#dgry:<FEN>",
     .help = "not sure this is used atm",
 } });

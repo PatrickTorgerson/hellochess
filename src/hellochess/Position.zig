@@ -6,6 +6,7 @@
 
 const std = @import("std");
 
+const fen = @import("fen.zig");
 const Piece = @import("Piece.zig");
 const Notation = @import("Notation.zig");
 const Coordinate = @import("Coordinate.zig");
@@ -34,8 +35,6 @@ pieces: [2]Bitboard,
 side_to_move: Affiliation,
 /// number of half moves played so far
 ply: i32 = 0,
-/// number of half moves since last capture or pawn move
-fifty_move_counter: i32 = 0,
 
 const initial_white_bits: u64 = 0xc0c0c0c0c0c0c0c0;
 const initial_black_bits: u64 = 0x0303030303030303;
@@ -55,12 +54,13 @@ pub fn initEmpty() Position {
 
 /// create a position with standard chess starting position
 pub fn init() Position {
-    return .{
-        .squares = starting_position,
-        .meta = Meta.init(.{}),
-        .side_to_move = .white,
-        .pieces = .{ Bitboard.fromInt(initial_white_bits), Bitboard.fromInt(initial_black_bits) },
-    };
+    return starting_position;
+}
+
+/// create a position from a fen string
+/// see fen.zig
+pub fn fromFen(fen_str: []const u8) fen.Error!Position {
+    return try fen.parse(fen_str);
 }
 
 /// return a duplicate of `position`
@@ -199,14 +199,12 @@ pub fn doMove(position: *Position, move: Move) void {
     position.squares[move.source().index()] = Piece.empty();
     position.squares[move.dest().index()] = piece;
     position.ply += 1;
-    position.fifty_move_counter += 1;
     position.side_to_move = position.side_to_move.opponent();
 
-    if (!captured.isEmpty() or piece.class().? == .pawn or move.promotion() != null)
-        position.fifty_move_counter = 0;
-
     position.meta.setCapturedPiece(captured);
-    position.meta.setFiftyCounter(position.fifty_move_counter);
+    position.meta.incFiftyCounter();
+    if (!captured.isEmpty() or piece.class().? == .pawn or move.promotion() != null)
+        position.meta.setFiftyCounter(0);
 
     // update castling rights
     if (move.dest().eql(Coordinate.h1) or move.source().eql(Coordinate.h1))
@@ -662,49 +660,4 @@ fn abs(val: i8) i8 {
 }
 
 /// standard chess starting position
-const starting_position: [64]Piece = blk_starting_position: {
-    var squares: [64]Piece = [_]Piece{Piece.empty()} ** 64;
-    // helper to get pieces on the back ranks
-    const back_rank = struct {
-        const sequence: [8]Class = blk_sequence: {
-            var classes: [8]Class = undefined;
-            // back rank pieces from a to h
-            classes[File.file_a.index()] = .rook;
-            classes[File.file_b.index()] = .knight;
-            classes[File.file_c.index()] = .bishop;
-            classes[File.file_d.index()] = .queen;
-            classes[File.file_e.index()] = .king;
-            classes[File.file_f.index()] = .bishop;
-            classes[File.file_g.index()] = .knight;
-            classes[File.file_h.index()] = .rook;
-            break :blk_sequence classes;
-        };
-        /// return white piece on back rank file `file`
-        pub fn white(file: File) Piece {
-            return Piece.init(sequence[file.index()], .white);
-        }
-        /// return black piece on back rank file `file`
-        pub fn black(file: File) Piece {
-            return Piece.init(sequence[file.index()], .black);
-        }
-    };
-
-    const white_pawn = Piece.init(.pawn, .white);
-    const black_pawn = Piece.init(.pawn, .black);
-    const white_back_rank = Affiliation.white.backRank();
-    const black_back_rank = Affiliation.black.backRank();
-    const white_second_rank = Affiliation.white.secondRank();
-    const black_second_rank = Affiliation.black.secondRank();
-
-    // iterate over files a to h (0 to 7)
-    var file_iter = File.file_a.iterator();
-    while (file_iter.next()) |file| {
-        // back rank
-        squares[Coordinate.from2d(file, white_back_rank).index()] = back_rank.white(file);
-        squares[Coordinate.from2d(file, black_back_rank).index()] = back_rank.black(file);
-        // pawns
-        squares[Coordinate.from2d(file, white_second_rank).index()] = white_pawn;
-        squares[Coordinate.from2d(file, black_second_rank).index()] = black_pawn;
-    }
-    break :blk_starting_position squares;
-};
+const starting_position = fen.parse(fen.starting_position) catch unreachable;

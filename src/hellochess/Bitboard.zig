@@ -38,7 +38,7 @@ pub fn set(bitboard: *Bitboard, coord: Coordinate, value: bool) void {
 }
 
 /// get value of bit associated with `coord`
-pub fn get(bitboard: *Bitboard, coord: Coordinate) bool {
+pub fn get(bitboard: Bitboard, coord: Coordinate) bool {
     return bitboard.bits.isSet(coord.index());
 }
 
