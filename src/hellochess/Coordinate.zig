@@ -116,20 +116,24 @@ pub const Direction = enum(u3) {
     // zig fmt: off
     /// offset required to move a 1d index 1 square in a given direction
     const offsets = [_]i8{
-         1,  // north
-        -1,  // south
-         8,  // east
-        -8,  // west
-         9,  // northeast
-        -7,  // northwest
-         7,  // southeast
-        -9,  // southwest
+        -8,  // north
+         8,  // south
+         1,  // east
+        -1,  // west
+        -7,  // northeast
+        -9,  // northwest
+         9,  // southeast
+         7,  // southwest
     };
     // zig fmt: on
 
     /// return offset required to move a 1d index 1 square in given direction
     pub fn offset(dir: Direction) i8 {
         return offsets[dir.asUsize()];
+    }
+
+    pub fn rankOffset(dir: Direction) i8 {
+        return @divFloor(dir.offset(), -8);
     }
 
     /// returns reversed version of `dir`
@@ -264,7 +268,7 @@ pub const DirectionalIterator = struct {
 const Coordinate = @This();
 
 /// encodes rank and file as a 1d index
-/// 0 = a1, 1 = a2 ... 8 = b1
+/// 0 = a8, 1 = b8 ... 8 = a7
 value: i8,
 
 /// creates Coordinate from 1d index
@@ -278,7 +282,7 @@ pub fn from1d(i: i8) Coordinate {
 /// creates Coordinate from 2d coord
 /// file and rank
 pub fn from2d(file: File, rank: Rank) Coordinate {
-    return Coordinate.from1d(file.val() * 8 + rank.val());
+    return Coordinate.from1d((7 - rank.val()) * 8 + file.val());
 }
 
 /// returns the string representation of a square eg: "e4"
@@ -310,13 +314,13 @@ pub fn index(coord: Coordinate) usize {
 /// return file coord lies on
 pub fn getFile(coord: Coordinate) File {
     std.debug.assert(coord.valid());
-    return File.init(@divFloor(coord.value, 8));
+    return File.init(@rem(coord.value, 8));
 }
 
 /// return rank coord lies on
 pub fn getRank(coord: Coordinate) Rank {
     std.debug.assert(coord.valid());
-    return Rank.init(@rem(coord.value, 8));
+    return Rank.init(7 - @divTrunc(coord.value, 8));
 }
 
 pub fn eql(coord: Coordinate, other: Coordinate) bool {
@@ -348,7 +352,7 @@ pub fn offset(coord: *Coordinate, file_offset: i8, rank_offset: i8) bool {
     else
         std.math.max(rank_offset, -squares_to_edge[coord.index()][Direction.south.asUsize()]);
 
-    coord.value += capped_rank_offset + capped_file_offset * 8;
+    coord.value += capped_file_offset + -capped_rank_offset * 8;
     return capped_file_offset == file_offset and capped_rank_offset == rank_offset;
 }
 
@@ -414,11 +418,11 @@ const squares_to_edge: [64][8]i8 = blk: {
     while (rank < 8) : (rank += 1) {
         var file: usize = 0;
         while (file < 8) : (file += 1) {
-            var north = 8 - 1 - rank;
+            var north = 7 - rank;
             var south = rank;
-            var east = 8 - 1 - file;
+            var east = 7 - file;
             var west = file;
-            const i = file * 8 + rank;
+            const i = (7 - rank) * 8 + file;
             num_to_edge[i][Direction.north.asUsize()] = north;
             num_to_edge[i][Direction.south.asUsize()] = south;
             num_to_edge[i][Direction.east.asUsize()] = east;
@@ -434,77 +438,77 @@ const squares_to_edge: [64][8]i8 = blk: {
 
 ///  string storing text data for square names, used in toString
 const square_names: []const u8 =
-    "a1" ++ "a2" ++ "a3" ++ "a4" ++ "a5" ++ "a6" ++ "a7" ++ "a8" ++
-    "b1" ++ "b2" ++ "b3" ++ "b4" ++ "b5" ++ "b6" ++ "b7" ++ "b8" ++
-    "c1" ++ "c2" ++ "c3" ++ "c4" ++ "c5" ++ "c6" ++ "c7" ++ "c8" ++
-    "d1" ++ "d2" ++ "d3" ++ "d4" ++ "d5" ++ "d6" ++ "d7" ++ "d8" ++
-    "e1" ++ "e2" ++ "e3" ++ "e4" ++ "e5" ++ "e6" ++ "e7" ++ "e8" ++
-    "f1" ++ "f2" ++ "f3" ++ "f4" ++ "f5" ++ "f6" ++ "f7" ++ "f8" ++
-    "g1" ++ "g2" ++ "g3" ++ "g4" ++ "g5" ++ "g6" ++ "g7" ++ "g8" ++
-    "h1" ++ "h2" ++ "h3" ++ "h4" ++ "h5" ++ "h6" ++ "h7" ++ "h8";
+    "a8b8c8d8e8f8g8h8" ++
+    "a7b7c7d7e7f7g7h7" ++
+    "a6b6c6d6e6f6g6h6" ++
+    "a5b5c5d5e5f5g5h5" ++
+    "a4b4c4d4e4f4g4h4" ++
+    "a3b3c3d3e3f3g3h3" ++
+    "a2b2c2d2e2f2g2h2" ++
+    "a1b1c1d1e1f1g1h1";
 
 /// named square constants
-pub const a1 = Coordinate.from1d(0);
-pub const a2 = Coordinate.from1d(1);
-pub const a3 = Coordinate.from1d(2);
-pub const a4 = Coordinate.from1d(3);
-pub const a5 = Coordinate.from1d(4);
-pub const a6 = Coordinate.from1d(5);
-pub const a7 = Coordinate.from1d(6);
-pub const a8 = Coordinate.from1d(7);
-pub const b1 = Coordinate.from1d(8);
-pub const b2 = Coordinate.from1d(9);
-pub const b3 = Coordinate.from1d(10);
-pub const b4 = Coordinate.from1d(11);
-pub const b5 = Coordinate.from1d(12);
-pub const b6 = Coordinate.from1d(13);
-pub const b7 = Coordinate.from1d(14);
-pub const b8 = Coordinate.from1d(15);
-pub const c1 = Coordinate.from1d(16);
-pub const c2 = Coordinate.from1d(17);
-pub const c3 = Coordinate.from1d(18);
-pub const c4 = Coordinate.from1d(19);
-pub const c5 = Coordinate.from1d(20);
-pub const c6 = Coordinate.from1d(21);
-pub const c7 = Coordinate.from1d(22);
-pub const c8 = Coordinate.from1d(23);
-pub const d1 = Coordinate.from1d(24);
-pub const d2 = Coordinate.from1d(25);
-pub const d3 = Coordinate.from1d(26);
-pub const d4 = Coordinate.from1d(27);
-pub const d5 = Coordinate.from1d(28);
-pub const d6 = Coordinate.from1d(29);
-pub const d7 = Coordinate.from1d(30);
-pub const d8 = Coordinate.from1d(31);
-pub const e1 = Coordinate.from1d(32);
-pub const e2 = Coordinate.from1d(33);
-pub const e3 = Coordinate.from1d(34);
-pub const e4 = Coordinate.from1d(35);
-pub const e5 = Coordinate.from1d(36);
-pub const e6 = Coordinate.from1d(37);
-pub const e7 = Coordinate.from1d(38);
-pub const e8 = Coordinate.from1d(39);
-pub const f1 = Coordinate.from1d(40);
-pub const f2 = Coordinate.from1d(41);
-pub const f3 = Coordinate.from1d(42);
-pub const f4 = Coordinate.from1d(43);
-pub const f5 = Coordinate.from1d(44);
-pub const f6 = Coordinate.from1d(45);
-pub const f7 = Coordinate.from1d(46);
-pub const f8 = Coordinate.from1d(47);
-pub const g1 = Coordinate.from1d(48);
-pub const g2 = Coordinate.from1d(49);
-pub const g3 = Coordinate.from1d(50);
-pub const g4 = Coordinate.from1d(51);
-pub const g5 = Coordinate.from1d(52);
-pub const g6 = Coordinate.from1d(53);
-pub const g7 = Coordinate.from1d(54);
-pub const g8 = Coordinate.from1d(55);
-pub const h1 = Coordinate.from1d(56);
-pub const h2 = Coordinate.from1d(57);
-pub const h3 = Coordinate.from1d(58);
-pub const h4 = Coordinate.from1d(59);
-pub const h5 = Coordinate.from1d(60);
-pub const h6 = Coordinate.from1d(61);
-pub const h7 = Coordinate.from1d(62);
-pub const h8 = Coordinate.from1d(63);
+pub const a8 = Coordinate.from1d(0);
+pub const b8 = Coordinate.from1d(1);
+pub const c8 = Coordinate.from1d(2);
+pub const d8 = Coordinate.from1d(3);
+pub const e8 = Coordinate.from1d(4);
+pub const f8 = Coordinate.from1d(5);
+pub const g8 = Coordinate.from1d(6);
+pub const h8 = Coordinate.from1d(7);
+pub const a7 = Coordinate.from1d(8);
+pub const b7 = Coordinate.from1d(9);
+pub const c7 = Coordinate.from1d(10);
+pub const d7 = Coordinate.from1d(11);
+pub const e7 = Coordinate.from1d(12);
+pub const f7 = Coordinate.from1d(13);
+pub const g7 = Coordinate.from1d(14);
+pub const h7 = Coordinate.from1d(15);
+pub const a6 = Coordinate.from1d(16);
+pub const b6 = Coordinate.from1d(17);
+pub const c6 = Coordinate.from1d(18);
+pub const d6 = Coordinate.from1d(19);
+pub const e6 = Coordinate.from1d(20);
+pub const f6 = Coordinate.from1d(21);
+pub const g6 = Coordinate.from1d(22);
+pub const h6 = Coordinate.from1d(23);
+pub const a5 = Coordinate.from1d(24);
+pub const b5 = Coordinate.from1d(25);
+pub const c5 = Coordinate.from1d(26);
+pub const d5 = Coordinate.from1d(27);
+pub const e5 = Coordinate.from1d(28);
+pub const f5 = Coordinate.from1d(29);
+pub const g5 = Coordinate.from1d(30);
+pub const h5 = Coordinate.from1d(31);
+pub const a4 = Coordinate.from1d(32);
+pub const b4 = Coordinate.from1d(33);
+pub const c4 = Coordinate.from1d(34);
+pub const d4 = Coordinate.from1d(35);
+pub const e4 = Coordinate.from1d(36);
+pub const f4 = Coordinate.from1d(37);
+pub const g4 = Coordinate.from1d(38);
+pub const h4 = Coordinate.from1d(39);
+pub const a3 = Coordinate.from1d(40);
+pub const b3 = Coordinate.from1d(41);
+pub const c3 = Coordinate.from1d(42);
+pub const d3 = Coordinate.from1d(43);
+pub const e3 = Coordinate.from1d(44);
+pub const f3 = Coordinate.from1d(45);
+pub const g3 = Coordinate.from1d(46);
+pub const h3 = Coordinate.from1d(47);
+pub const a2 = Coordinate.from1d(48);
+pub const b2 = Coordinate.from1d(49);
+pub const c2 = Coordinate.from1d(50);
+pub const d2 = Coordinate.from1d(51);
+pub const e2 = Coordinate.from1d(52);
+pub const f2 = Coordinate.from1d(53);
+pub const g2 = Coordinate.from1d(54);
+pub const h2 = Coordinate.from1d(55);
+pub const a1 = Coordinate.from1d(56);
+pub const b1 = Coordinate.from1d(57);
+pub const c1 = Coordinate.from1d(58);
+pub const d1 = Coordinate.from1d(59);
+pub const e1 = Coordinate.from1d(60);
+pub const f1 = Coordinate.from1d(61);
+pub const g1 = Coordinate.from1d(62);
+pub const h1 = Coordinate.from1d(63);

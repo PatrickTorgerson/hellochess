@@ -469,7 +469,7 @@ fn hasVisability(position: *Position, source: Coordinate, dest: Coordinate, atta
     switch (class) {
         .pawn => {
             if (attacking) {
-                return (drank == srank + affiliation.direction().offset()) and
+                return (drank == srank + affiliation.direction().rankOffset()) and
                     (dfile == sfile + 1 or dfile == sfile - 1);
             } else {
                 // double push
@@ -481,11 +481,11 @@ fn hasVisability(position: *Position, source: Coordinate, dest: Coordinate, atta
                         position.at(dest).isEmpty();
                 }
                 // single push
-                if (dfile == sfile and drank == srank + affiliation.direction().offset())
+                if (dfile == sfile and drank == srank + affiliation.direction().rankOffset())
                     return position.at(dest).isEmpty();
                 // captures
                 if ((dfile == sfile + 1 or dfile == sfile - 1) and
-                    drank == srank + affiliation.direction().offset())
+                    drank == srank + affiliation.direction().rankOffset())
                 {
                     if (position.at(dest).isEmpty()) {
                         // en passant
