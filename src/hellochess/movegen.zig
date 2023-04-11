@@ -265,7 +265,7 @@ pub const MoveIterator = struct {
         const targets = target_coords[index];
 
         // cannot castle through check
-        const pieces = this.position.piecesFromAffiliation(affiliation.opponent());
+        const pieces = this.position.bitboard(affiliation.opponent(), null);
         var piece_iter = pieces.iterator();
         while (piece_iter.next()) |coord| {
             var move_iter = MoveIterator.init(this.position, coord) catch unreachable;

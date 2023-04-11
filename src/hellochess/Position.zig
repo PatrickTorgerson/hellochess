@@ -7,6 +7,8 @@
 const std = @import("std");
 
 const fen = @import("fen.zig");
+const movegen = @import("movegen.zig");
+
 const Piece = @import("Piece.zig");
 const Notation = @import("Notation.zig");
 const Coordinate = @import("Coordinate.zig");
@@ -14,6 +16,7 @@ const Move = @import("Move.zig");
 const Meta = @import("Meta.zig");
 const Bitboard = @import("Bitboard.zig");
 
+const MoveIterator = movegen.MoveIterator;
 const Class = Piece.Class;
 const Affiliation = Piece.Affiliation;
 const File = Coordinate.File;
@@ -29,27 +32,27 @@ squares: [64]Piece,
 /// move counter, and last captured piece
 meta: Meta,
 /// cached king coords
-kings: [2]Coordinate = .{ Coordinate.e1, Coordinate.e8 },
+kings: [2]Coordinate,
 /// cached piece coords per affiliation
 pieces: [2]Bitboard,
+/// cached pawn coords per affiliation
+pawns: [2]Bitboard,
+/// cached knight coords per affiliation
+knights: [2]Bitboard,
+/// cached bishop coords per affiliation
+bishops: [2]Bitboard,
+/// cached rook coords per affiliation
+rooks: [2]Bitboard,
+/// cached queen coords per affiliation
+queens: [2]Bitboard,
+/// affiliation to make next move
 side_to_move: Affiliation,
 /// number of half moves played so far
-ply: i32 = 0,
-
-const initial_white_bits: u64 = 0xc0c0c0c0c0c0c0c0;
-const initial_black_bits: u64 = 0x0303030303030303;
+ply: i32,
 
 /// create an empty position, with only kings
 pub fn initEmpty() Position {
-    var this = Position{
-        .squares = [1]Piece{Piece.empty()} ** 64,
-        .meta = Meta.initEmpty(),
-        .side_to_move = .white,
-        .pieces = .{ Bitboard.init(), Bitboard.init() },
-    };
-    this.squares[Affiliation.white.kingCoord().index()] = Piece.init(.king, .white);
-    this.squares[Affiliation.black.kingCoord().index()] = Piece.init(.king, .black);
-    return this;
+    return empty_position;
 }
 
 /// create a position with standard chess starting position
@@ -73,14 +76,28 @@ pub fn at(position: Position, pos: Coordinate) Piece {
     return position.squares[pos.index()];
 }
 
+/// returns a bitboard marking all coords in `position` with
+/// pieces matching `affiliation` and `class`
+pub fn bitboard(position: Position, affiliation: Affiliation, class: ?Class) Bitboard {
+    const i = affiliation.index();
+    return switch (class orelse return position.pieces[i]) {
+        .queen => position.queens[i],
+        .rook => position.rooks[i],
+        .bishop => position.bishops[i],
+        .knight => position.knights[i],
+        .pawn => position.pawns[i],
+        .king => blk: {
+            var board = Bitboard.init();
+            board.set(position.kings[0], true);
+            board.set(position.kings[1], true);
+            break :blk board;
+        },
+    };
+}
+
 /// returns coord of current side to move's king
 pub fn kingCoord(position: Position) Coordinate {
     return position.kings[position.side_to_move.index()];
-}
-
-/// return bitboard of affiliated pieces
-pub fn piecesFromAffiliation(position: Position, affiliation: Affiliation) Bitboard {
-    return position.pieces[affiliation.index()];
 }
 
 /// counts material value for given affiliation
@@ -147,11 +164,21 @@ pub fn spawn(position: *Position, class: Class, coord: Coordinate) Move.Result {
             position.meta.setCastleKing(position.side_to_move, true);
     }
     position.side_to_move = position.side_to_move.opponent();
+
+    // update class bitboard
+    switch (class) {
+        .queen => position.queens[position.side_to_move.index()].set(coord, true),
+        .rook => position.rooks[position.side_to_move.index()].set(coord, true),
+        .bishop => position.bishops[position.side_to_move.index()].set(coord, true),
+        .knight => position.knights[position.side_to_move.index()].set(coord, true),
+        .pawn => position.pawns[position.side_to_move.index()].set(coord, true),
+        .king => {},
+    }
+
     return position.checksAndMates();
 }
 
 /// makes a move, no validation, no searching for checks or mates
-/// returns null when move result is ok but potentially a check or mate
 pub fn doMove(position: *Position, move: Move) void {
     var piece = position.at(move.source());
     var captured = position.at(move.dest());
@@ -194,6 +221,31 @@ pub fn doMove(position: *Position, move: Move) void {
         else => unreachable,
     }
 
+    // update class bitboards
+    switch (piece.class().?) {
+        .queen => {
+            position.queens[position.side_to_move.index()].set(move.source(), false);
+            position.queens[position.side_to_move.index()].set(move.dest(), true);
+        },
+        .rook => {
+            position.rooks[position.side_to_move.index()].set(move.source(), false);
+            position.rooks[position.side_to_move.index()].set(move.dest(), true);
+        },
+        .bishop => {
+            position.bishops[position.side_to_move.index()].set(move.source(), false);
+            position.bishops[position.side_to_move.index()].set(move.dest(), true);
+        },
+        .knight => {
+            position.knights[position.side_to_move.index()].set(move.source(), false);
+            position.knights[position.side_to_move.index()].set(move.dest(), true);
+        },
+        .pawn => {
+            position.pawns[position.side_to_move.index()].set(move.source(), false);
+            position.pawns[position.side_to_move.index()].set(move.dest(), true);
+        },
+        .king => {},
+    }
+
     position.pieces[position.side_to_move.index()].set(move.source(), false);
     position.pieces[position.side_to_move.index()].set(move.dest(), true);
     position.squares[move.source().index()] = Piece.empty();
@@ -217,20 +269,10 @@ pub fn doMove(position: *Position, move: Move) void {
         position.meta.setCastleQueen(.black, false);
 }
 
-/// moves a pices to a different square, does no validation
-pub fn makeMove(position: *Position, move: Move) Move.Result {
-    position.doMove(move);
-    return position.checksAndMates();
-}
-
 /// submit move, move to be made pending validation
 /// uses standard chess notation (https://en.wikipedia.org/wiki/Algebraic_notation_(chess))
 pub fn submitMove(position: *Position, move_notation: []const u8) Move.Result {
     const notation = Notation.parse(move_notation) orelse return .bad_notation;
-
-    if (notation.castle_kingside) |castle_kingside| {
-        return position.castle(castle_kingside);
-    }
 
     // cannot capture allied pieces
     if (position.at(notation.destination).affiliation()) |affiliation| {
@@ -238,68 +280,71 @@ pub fn submitMove(position: *Position, move_notation: []const u8) Move.Result {
             return .blocked;
     }
 
-    var buffer: [32]Coordinate = undefined;
-    const results = position.query(&buffer, .{
-        .class = notation.class,
-        .affiliation = position.side_to_move,
-        .target_coord = notation.destination,
-        .source_file = notation.source_file,
-        .source_rank = notation.source_rank,
-    });
+    var buffer: [32]Move = undefined;
+    const moves = position.findMoves(
+        &buffer,
+        position.bitboard(position.side_to_move, notation.class),
+        notation.destination,
+        notation.source_file,
+        notation.source_rank,
+    ) catch unreachable;
 
-    if (results.len > 1)
+    if (moves.len > 1)
         return .ambiguous_piece;
-    if (results.len == 0)
+    if (moves.len == 0)
         return .no_visibility;
 
-    const source = results[0];
+    const move = moves[0];
 
-    var move_flag: Move.Flag = .none;
+    position.doMove(move);
+    return position.checksAndMates();
+}
 
-    if (position.at(source).class().? == .pawn and
-        notation.destination.getRank() == position.side_to_move.opponent().backRank())
-    {
-        const promote_to: Class = notation.promote_to orelse .queen;
-        move_flag = switch (promote_to) {
-            .knight => .promote_knight,
-            .bishop => .promote_bishop,
-            .rook => .promote_rook,
-            .queen => .promote_queen,
-            else => return .bad_notation,
-        };
-    } else if (position.at(source).class().? == .pawn and
-        notation.destination.getRank() == position.side_to_move.doublePushRank() and
-        source.getRank() == position.side_to_move.secondRank())
-        move_flag = .pawn_double_push
-    else if (position.at(source).class().? == .pawn and
-        source.getRank() == position.side_to_move.enPassantRank() and
-        source.getFile() != notation.destination.getFile() and
-        position.meta.enpassantFile() == notation.destination.getFile())
-        move_flag = .enpassant_capture;
-
-    const move = Move.init(source, notation.destination, move_flag);
-
-    if (position.at(source).class().? == .king) {
-        const attackers = position.query(&buffer, .{
-            .affiliation = position.side_to_move.opponent(),
-            .target_coord = notation.destination,
-            .attacking = true,
-            .hypothetical_move = move,
-        });
-        if (attackers.len > 0)
-            return .enters_check;
-    } else {
-        const checkers = position.query(&buffer, .{
-            .affiliation = position.side_to_move.opponent(),
-            .target_coord = position.kingCoord(),
-            .hypothetical_move = move,
-            .attacking = true,
-        });
-        if (checkers.len > 0)
-            return .enters_check;
+/// returns moves that the marked pieces in `coords` can make
+/// that land on `target` coord. if `coords` marks an empty square
+/// it is ignored. moves are written into `buffer`, if buffer cannot
+/// fit all moves error.BufferOverflow is returned
+/// `rank` specifies expected starting rank
+/// `file` specifies expected starting file
+pub fn findMoves(position: Position, buffer: []Move, coords: Bitboard, target: Coordinate, file: ?File, rank: ?Rank) ![]Move {
+    var i: usize = 0;
+    var coord_iter = coords.iterator();
+    coord_loop: while (coord_iter.next()) |coord| {
+        if (position.at(coord).isEmpty())
+            continue :coord_loop;
+        if (file != null and coord.getFile() != file.?)
+            continue :coord_loop;
+        if (rank != null and coord.getRank() != rank.?)
+            continue :coord_loop;
+        var move_iter = try MoveIterator.init(&position, coord);
+        move_loop: while (move_iter.next()) |move| {
+            if (move.dest().eql(target)) {
+                // MoveIterator returns psuedo legal moves
+                // ensure move is legal
+                var p = position;
+                p.doMove(move);
+                if (p.inCheck(position.at(coord).affiliation().?))
+                    continue :move_loop;
+                buffer[i] = move;
+                i += 1;
+            }
+        }
     }
+    return buffer[0..i];
+}
 
-    return position.makeMove(move);
+pub fn inCheck(position: Position, affiliation: Affiliation) bool {
+    const target = position.kings[affiliation.index()];
+    const opponents = position.bitboard(affiliation.opponent(), null);
+    var coord_iter = opponents.iterator();
+    while (coord_iter.next()) |coord| {
+        var move_iter = MoveIterator.init(&position, coord) catch continue;
+        while (move_iter.next()) |move| {
+            if (move.dest().eql(target))
+                return true;
+        }
+    }
+    return false;
 }
 
 /// returns if current side to move has casling rights
@@ -454,87 +499,14 @@ pub fn query(position: Position, buffer: *[32]Coordinate, query_expr: Query) []c
 /// attacking ensures that the source piece can capture on dest, important for pawns
 /// takes source and dest as 1d coordinates
 fn hasVisability(position: *Position, source: Coordinate, dest: Coordinate, attacking: bool) bool {
-    if (dest.eql(source))
+    // pawns only attack diagonaly
+    if (attacking and position.at(source).class().? == .pawn and source.getFile() == dest.getFile())
         return false;
-    const piece = position.at(source);
-    if (piece.isEmpty()) return false;
-    const class = piece.class().?;
-    const affiliation = piece.affiliation().?;
-    const sfile = source.getFile().val();
-    const srank = source.getRank().val();
-    const dfile = dest.getFile().val();
-    const drank = dest.getRank().val();
-    switch (class) {
-        .pawn => {
-            if (attacking) {
-                return (drank == srank + affiliation.direction().rankOffset()) and
-                    (dfile == sfile + 1 or dfile == sfile - 1);
-            } else {
-                // double push
-                if (drank == affiliation.doublePushRank().val() and
-                    srank == affiliation.secondRank().val())
-                {
-                    return dfile == sfile and
-                        position.at(source.offsettedDir(affiliation.direction(), 1).?).isEmpty() and
-                        position.at(dest).isEmpty();
-                }
-                // single push
-                if (dfile == sfile and drank == srank + affiliation.direction().rankOffset())
-                    return position.at(dest).isEmpty();
-                // captures
-                if ((dfile == sfile + 1 or dfile == sfile - 1) and
-                    drank == srank + affiliation.direction().rankOffset())
-                {
-                    if (position.at(dest).isEmpty()) {
-                        // en passant
-                        const coord = dest.offsettedDir(affiliation.reverseDirection(), 1).?;
-                        const enpassant_target = position.at(coord);
-                        if (!enpassant_target.isEmpty()) {
-                            const enpassant_file = position.meta.enpassantFile();
-                            return (enpassant_target.class().? == .pawn and
-                                enpassant_target.affiliation().? == affiliation.opponent() and
-                                enpassant_file != null and
-                                enpassant_file.?.val() == dfile);
-                        }
-                    } else return position.at(dest).affiliation().? == affiliation.opponent();
-                }
-                return false;
-            }
-        },
-        .knight => {
-            const rank_diff: i8 = abs(drank - srank);
-            const file_diff: i8 = abs(dfile - sfile);
-            return (rank_diff == 2 and file_diff == 1) or (rank_diff == 1 and file_diff == 2);
-        },
-        .bishop => {
-            const rank_diff: i8 = abs(drank - srank);
-            const file_diff: i8 = abs(dfile - sfile);
-            if (rank_diff != file_diff)
-                return false;
-            return position.ensureEmpty(source, dest);
-        },
-        .rook => {
-            if (drank != srank and dfile != sfile)
-                return false;
-            return position.ensureEmpty(source, dest);
-        },
-        .queen => {
-            const rank_diff: i8 = abs(drank - srank);
-            const file_diff: i8 = abs(dfile - sfile);
-            if (drank != srank and dfile != sfile and
-                rank_diff != file_diff)
-                return false;
-            return position.ensureEmpty(source, dest);
-        },
-        .king => {
-            if (dfile > sfile + 1 or
-                dfile < sfile - 1 or
-                drank > srank + 1 or
-                drank < srank - 1)
-                return false
-            else
-                return true;
-        },
+    var move_iter = MoveIterator.init(position, source) catch unreachable;
+    while (move_iter.next()) |move| {
+        if (move.dest().eql(dest)) {
+            return true;
+        }
     }
     return false;
 }
@@ -627,13 +599,7 @@ fn isMate(position: *Position) bool {
 
 /// looks for checks, mates, and draws
 fn checksAndMates(position: *Position) Move.Result {
-    var buffer: [32]Coordinate = undefined;
-    const checkers = position.query(&buffer, .{
-        .affiliation = position.side_to_move.opponent(),
-        .target_coord = position.kingCoord(),
-        .attacking = true,
-    });
-    if (checkers.len > 0) {
+    if (position.inCheck(position.side_to_move)) {
         return if (position.isMate())
             .ok_mate
         else
@@ -661,3 +627,5 @@ fn abs(val: i8) i8 {
 
 /// standard chess starting position
 const starting_position = fen.parse(fen.starting_position) catch unreachable;
+/// position for empty boards, kings must always exist
+const empty_position = fen.parse("4k3/8/8/8/8/8/8/4K3 w - - 0 1") catch unreachable;

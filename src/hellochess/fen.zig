@@ -17,6 +17,8 @@ const std = @import("std");
 const Position = @import("Position.zig");
 const Piece = @import("Piece.zig");
 const Coordinate = @import("Coordinate.zig");
+const Meta = @import("Meta.zig");
+const Bitboard = @import("Bitboard.zig");
 
 const Affiliation = Piece.Affiliation;
 const Class = Piece.Class;
@@ -41,7 +43,21 @@ pub const Error = error{
 ///  - arbitrary number of delimiting spaces
 ///  - duplicate castling rights ignored
 pub fn parse(fen: []const u8) Error!Position {
-    var position = Position.initEmpty();
+    @setEvalBranchQuota(1500);
+
+    var position: Position = .{
+        .squares = undefined,
+        .meta = Meta.initEmpty(),
+        .kings = undefined,
+        .pieces = [_]Bitboard{Bitboard.init()} ** 2,
+        .pawns = [_]Bitboard{Bitboard.init()} ** 2,
+        .knights = [_]Bitboard{Bitboard.init()} ** 2,
+        .bishops = [_]Bitboard{Bitboard.init()} ** 2,
+        .rooks = [_]Bitboard{Bitboard.init()} ** 2,
+        .queens = [_]Bitboard{Bitboard.init()} ** 2,
+        .side_to_move = .white,
+        .ply = 0,
+    };
 
     var fen_index: usize = 0;
     while (fen_index < fen.len and fen[fen_index] == ' ')
@@ -88,7 +104,11 @@ pub fn parse(fen: []const u8) Error!Position {
             position.pieces[affiliation.index()].set(coord, true);
             switch (class) {
                 .king => position.kings[affiliation.index()] = coord,
-                else => {},
+                .queen => position.queens[affiliation.index()].set(coord, true),
+                .rook => position.rooks[affiliation.index()].set(coord, true),
+                .bishop => position.bishops[affiliation.index()].set(coord, true),
+                .knight => position.knights[affiliation.index()].set(coord, true),
+                .pawn => position.pawns[affiliation.index()].set(coord, true),
             }
             fen_index += 1;
             square_index += 1;
@@ -218,40 +238,93 @@ test "fen parse starting_position" {
     try std.testing.expectEqual(Piece.init(.pawn, .white), position.at(Coordinate.g2));
     try std.testing.expectEqual(Piece.init(.pawn, .black), position.at(Coordinate.g7));
 
-    try verifyBitboards(position);
+    try expectBitboardInSync(position);
 }
 
 test "fen parse endgame" {
     const fen = "8/5k2/3p4/1p1Pp2p/pP2Pp1P/P4P1K/8/8 b - - 99 50";
     const position = try parse(fen);
-    try verifyBitboards(position);
+    try expectBitboardInSync(position);
 }
 
 /// asserts all bitbards are up to date with squares array
-fn verifyBitboards(position: Position) error{ bitboards_out_of_sync, king_out_of_sync }!void {
+fn expectBitboardInSync(position: Position) !void {
+    if (position.kings[0].eql(position.kings[1])) {
+        std.debug.print("kings occupying same square, {s}\n", .{position.kings[0].toString()});
+        return error.TestExpectBitboardInSync;
+    }
+
     var index: usize = 0;
     while (index < 64) : (index += 1) {
         const piece = position.squares[index];
-        if (piece.affiliation() == Affiliation.white) {
-            if (!position.pieces[0].get(Coordinate.from1d(@intCast(i8, index))))
-                return error.bitboards_out_of_sync;
-            if (position.pieces[1].get(Coordinate.from1d(@intCast(i8, index))))
-                return error.bitboards_out_of_sync;
-        } else if (piece.affiliation() == Affiliation.black) {
-            if (position.pieces[0].get(Coordinate.from1d(@intCast(i8, index))))
-                return error.bitboards_out_of_sync;
-            if (!position.pieces[1].get(Coordinate.from1d(@intCast(i8, index))))
-                return error.bitboards_out_of_sync;
-        } else {
-            if (position.pieces[0].get(Coordinate.from1d(@intCast(i8, index))))
-                return error.bitboards_out_of_sync;
-            if (position.pieces[1].get(Coordinate.from1d(@intCast(i8, index))))
-                return error.bitboards_out_of_sync;
-        }
+        const coord = Coordinate.from1d(@intCast(i8, index));
 
         if (piece.class() == Class.king) {
-            if (position.kings[piece.affiliation().?.index()].index() != index)
-                return error.king_out_of_sync;
+            if (!position.kings[piece.affiliation().?.index()].eql(coord)) {
+                const expected = position.kings[piece.affiliation().?.index()];
+                std.debug.print("expected king on {s}, found on {s}", .{ expected.toString(), coord.toString() });
+                return error.TestExpectBitboardInSync;
+            }
+        }
+
+        if (piece.affiliation()) |affiliation| {
+            if (!position.pieces[affiliation.index()].get(coord)) {
+                std.debug.print("missing allied piece on {s}\n", .{coord.toString()});
+                return error.TestExpectBitboardInSync;
+            }
+            if (position.pieces[affiliation.opponent().index()].get(coord)) {
+                std.debug.print("unexpected opponent piece on {s}\n", .{coord.toString()});
+                return error.TestExpectBitboardInSync;
+            }
+
+            const class = piece.class().?;
+            const bitboards = switch (class) {
+                .queen => &position.queens,
+                .rook => &position.rooks,
+                .bishop => &position.bishops,
+                .knight => &position.knights,
+                .pawn => &position.pawns,
+                .king => continue,
+            };
+
+            if (!bitboards[affiliation.index()].get(coord)) {
+                std.debug.print("missing allied {s} on {s}\n", .{ @tagName(class), coord.toString() });
+                return error.TestExpectBitboardInSync;
+            }
+            if (bitboards[affiliation.opponent().index()].get(coord)) {
+                std.debug.print("unexpected opponent {s} on {s}\n", .{ @tagName(class), coord.toString() });
+                return error.TestExpectBitboardInSync;
+            }
+        } else {
+            if (position.pieces[0].get(coord) or position.pieces[1].get(coord)) {
+                std.debug.print("unexpected piece on {s}\n", .{coord.toString()});
+                return error.TestExpectBitboardInSync;
+            }
+
+            if (position.queens[0].get(coord) or position.queens[1].get(coord)) {
+                std.debug.print("unexpected queen on {s}\n", .{coord.toString()});
+                return error.TestExpectBitboardInSync;
+            }
+
+            if (position.rooks[0].get(coord) or position.rooks[1].get(coord)) {
+                std.debug.print("unexpected rook on {s}\n", .{coord.toString()});
+                return error.TestExpectBitboardInSync;
+            }
+
+            if (position.bishops[0].get(coord) or position.bishops[1].get(coord)) {
+                std.debug.print("unexpected bishop on {s}\n", .{coord.toString()});
+                return error.TestExpectBitboardInSync;
+            }
+
+            if (position.knights[0].get(coord) or position.knights[1].get(coord)) {
+                std.debug.print("unexpected knight on {s}\n", .{coord.toString()});
+                return error.TestExpectBitboardInSync;
+            }
+
+            if (position.pawns[0].get(coord) or position.pawns[1].get(coord)) {
+                std.debug.print("unexpected pawn on {s}\n", .{coord.toString()});
+                return error.TestExpectBitboardInSync;
+            }
         }
     }
 }
