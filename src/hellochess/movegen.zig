@@ -31,6 +31,7 @@ pub const MoveIterator = struct {
     piece: Piece,
     i: usize,
     at: Coordinate,
+    exclude_castles: bool = false,
 
     /// create a `MoveIterator`
     /// assumes `position` will be in scope for the lifetime
@@ -108,14 +109,17 @@ pub const MoveIterator = struct {
 
     /// next() implementation for kings
     fn nextKing(this: *MoveIterator) ?Move {
-        const offsets = [_]i8{ -9, -8, -7, -1, 1, 7, 8, 9 };
         const affiliation = this.piece.affiliation().?;
+        // zig fmt: off
+        const file_offsets = [_]i8{ -1, 0, 1, -1, 1, -1,  0,  1 };
+        const rank_offsets = [_]i8{  1, 1, 1,  0, 0, -1, -1, -1 };
+        // zig fmt: on
 
-        if (this.i > offsets.len + 1)
+        if (this.i > file_offsets.len + 1)
             return null;
 
-        while (this.i < offsets.len) {
-            const at = this.coord.offsettedVal(offsets[this.i]);
+        while (this.i < file_offsets.len) {
+            const at = this.coord.offsetted(file_offsets[this.i], rank_offsets[this.i]);
             this.i += 1;
             if (at == null) continue;
             const piece = this.position.at(at.?);
@@ -123,23 +127,26 @@ pub const MoveIterator = struct {
                 return Move.init(this.coord, at.?, .none);
         }
 
+        if (this.exclude_castles)
+            return null;
+
         // can only castle from starting pos
         if (this.coord.value != affiliation.kingCoord().value)
             return null;
 
-        if (this.i == offsets.len) {
+        if (this.i == file_offsets.len) {
             // king side castle
             this.i += 1;
             if (this.position.meta.castleKing(affiliation) and
-                !this.canCastle(affiliation, .kingside))
+                this.canCastle(affiliation, .kingside))
             {
                 return Move.init(this.coord, affiliation.kingCastleDest(), .castle);
             }
-        } else if (this.i == offsets.len + 1) {
+        } else if (this.i == file_offsets.len + 1) {
             // queenside castle
             this.i += 1;
             if (this.position.meta.castleQueen(affiliation) and
-                !this.canCastle(affiliation, .queenside))
+                this.canCastle(affiliation, .queenside))
             {
                 return Move.init(this.coord, affiliation.queenCastleDest(), .castle);
             }
@@ -258,10 +265,11 @@ pub const MoveIterator = struct {
         const targets = target_coords[index];
 
         // cannot castle through check
-        const pieces = this.position.piecesFromAffiliation(affiliation);
+        const pieces = this.position.piecesFromAffiliation(affiliation.opponent());
         var piece_iter = pieces.iterator();
         while (piece_iter.next()) |coord| {
             var move_iter = MoveIterator.init(this.position, coord) catch unreachable;
+            move_iter.exclude_castles = true;
             while (move_iter.next()) |move| {
                 for (targets) |target| {
                     if (move.dest().value == target.value)
@@ -292,6 +300,65 @@ pub fn generateMoves(position: Position, affiliation: Affiliation, buffer: []Mov
     _ = affiliation;
     _ = position;
     return buffer[0..0];
+}
+
+test "movegen - king" {
+    const fen = "k7/8/8/8/8/1r1P4/2K5/8 w - - 0 1";
+    var black_moves = [_]Move{
+        Move.init(Coordinate.a8, Coordinate.a7, .none),
+        Move.init(Coordinate.a8, Coordinate.b7, .none),
+        Move.init(Coordinate.a8, Coordinate.b8, .none),
+    };
+    var white_moves = [_]Move{
+        Move.init(Coordinate.c2, Coordinate.b3, .none),
+        Move.init(Coordinate.c2, Coordinate.c3, .none),
+        Move.init(Coordinate.c2, Coordinate.b2, .none),
+        Move.init(Coordinate.c2, Coordinate.d2, .none),
+        Move.init(Coordinate.c2, Coordinate.b1, .none),
+        Move.init(Coordinate.c2, Coordinate.c1, .none),
+        Move.init(Coordinate.c2, Coordinate.d1, .none),
+    };
+    try expectMoves(fen, Coordinate.a8, &black_moves, black_moves.len);
+    try expectMoves(fen, Coordinate.c2, &white_moves, white_moves.len);
+}
+
+test "movegen - king - castle" {
+    const fen1 = "r3k2r/8/8/8/8/8/8/2R1K2R w qkK - 0 1";
+    var black_moves1 = [_]Move{
+        Move.init(Coordinate.e8, Coordinate.g8, .castle),
+        Move.init(Coordinate.e8, Coordinate.d8, .none),
+        Move.init(Coordinate.e8, Coordinate.d7, .none),
+        Move.init(Coordinate.e8, Coordinate.e7, .none),
+        Move.init(Coordinate.e8, Coordinate.f7, .none),
+        Move.init(Coordinate.e8, Coordinate.f8, .none),
+    };
+    var white_moves1 = [_]Move{
+        Move.init(Coordinate.e1, Coordinate.g1, .castle),
+        Move.init(Coordinate.e1, Coordinate.d1, .none),
+        Move.init(Coordinate.e1, Coordinate.d2, .none),
+        Move.init(Coordinate.e1, Coordinate.e2, .none),
+        Move.init(Coordinate.e1, Coordinate.f2, .none),
+        Move.init(Coordinate.e1, Coordinate.f1, .none),
+    };
+    try expectMoves(fen1, Coordinate.e8, &black_moves1, black_moves1.len);
+    try expectMoves(fen1, Coordinate.e1, &white_moves1, white_moves1.len);
+
+    const fen2 = "r2k3r/4r3/8/8/8/8/8/R3K2R w kqKQ - 0 1";
+    var black_moves2 = [_]Move{
+        Move.init(Coordinate.d8, Coordinate.c8, .none),
+        Move.init(Coordinate.d8, Coordinate.c7, .none),
+        Move.init(Coordinate.d8, Coordinate.d7, .none),
+        Move.init(Coordinate.d8, Coordinate.e8, .none),
+    };
+    var white_moves2 = [_]Move{
+        Move.init(Coordinate.e1, Coordinate.d1, .none),
+        Move.init(Coordinate.e1, Coordinate.d2, .none),
+        Move.init(Coordinate.e1, Coordinate.e2, .none),
+        Move.init(Coordinate.e1, Coordinate.f2, .none),
+        Move.init(Coordinate.e1, Coordinate.f1, .none),
+    };
+    try expectMoves(fen2, Coordinate.d8, &black_moves2, black_moves2.len);
+    try expectMoves(fen2, Coordinate.e1, &white_moves2, white_moves2.len);
 }
 
 test "movegen - queen" {

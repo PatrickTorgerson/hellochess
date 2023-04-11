@@ -6,6 +6,7 @@
 
 pub const util = @import("hellochess/util.zig");
 pub const movegen = @import("hellochess/movegen.zig");
+pub const fen = @import("hellochess/fen.zig");
 
 pub const Piece = @import("hellochess/Piece.zig");
 pub const Position = @import("hellochess/Position.zig");
