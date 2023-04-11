@@ -292,14 +292,24 @@ pub const MoveIterator = struct {
     }
 };
 
-/// generates possible moves for the given affiliation
+/// generates possible psuedo legal moves for the given affiliation
 /// reults are written into `buffer`, if space in `buffer`
 /// is exahstid before all moves have been written,
-/// return `error.buffer_overflow`
-pub fn generateMoves(position: Position, affiliation: Affiliation, buffer: []Move) error{buffer_overflow}![]Move {
-    _ = affiliation;
-    _ = position;
-    return buffer[0..0];
+/// return `error.bufferOverflow`
+pub fn generateMoves(buffer: []Move, position: Position, affiliation: Affiliation) ![]Move {
+    const coords = position.bitboard(affiliation, null);
+    var i: usize = 0;
+    var coord_iter = coords.iterator();
+    while (coord_iter.next()) |coord| {
+        var move_iter = MoveIterator.init(&position, coord) catch unreachable;
+        while (move_iter.next()) |move| {
+            if (i >= buffer.len)
+                return error.bufferOverflow;
+            buffer[i] = move;
+            i += 1;
+        }
+    }
+    return buffer[0..i];
 }
 
 test "movegen - king" {

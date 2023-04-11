@@ -42,6 +42,10 @@ pub fn get(bitboard: Bitboard, coord: Coordinate) bool {
     return bitboard.bits.isSet(coord.index());
 }
 
+pub fn count(bitboard: Bitboard) usize {
+    return bitboard.bits.count();
+}
+
 /// iterate over set bits
 pub const Iterator = struct {
     iter: BitSet.Iterator(.{}),

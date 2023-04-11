@@ -66,11 +66,6 @@ pub fn fromFen(fen_str: []const u8) fen.Error!Position {
     return try fen.parse(fen_str);
 }
 
-/// return a duplicate of `position`
-pub fn dupe(position: Position) Position {
-    return position;
-}
-
 /// return piece at coord
 pub fn at(position: Position, pos: Coordinate) Piece {
     return position.squares[pos.index()];
@@ -102,13 +97,10 @@ pub fn kingCoord(position: Position) Coordinate {
 
 /// counts material value for given affiliation
 pub fn countMaterial(position: Position, affiliation: Affiliation) i32 {
-    var buffer: [32]Coordinate = undefined;
-    const pieces = position.query(&buffer, .{
-        .affiliation = affiliation,
-        .exclude_king = true,
-    });
+    const pieces = position.bitboard(affiliation, null);
     var material: i32 = 0;
-    for (pieces) |coord| {
+    var iter = pieces.iterator();
+    while (iter.next()) |coord| {
         material += position.at(coord).class().?.value();
     }
     return material;
@@ -116,31 +108,12 @@ pub fn countMaterial(position: Position, affiliation: Affiliation) i32 {
 
 /// write pieces missing from affiliated posistion
 pub fn writeCapturedPieces(position: Position, writer: anytype, affiliation: Affiliation) !void {
-    var buffer: [32]Coordinate = undefined;
-    const pieces = position.query(&buffer, .{
-        .affiliation = affiliation,
-        .exclude_king = true,
-    });
-    var pawns: i32 = 0;
-    var bishops: i32 = 0;
-    var knights: i32 = 0;
-    var rooks: i32 = 0;
-    var queens: i32 = 0;
-    for (pieces) |coord| {
-        switch (position.at(coord).class().?) {
-            .pawn => pawns += 1,
-            .bishop => bishops += 1,
-            .knight => knights += 1,
-            .rook => rooks += 1,
-            .queen => queens += 1,
-            .king => {},
-        }
-    }
-    try writer.writeByteNTimes('P', @intCast(usize, std.math.max(8 - pawns, 0)));
-    try writer.writeByteNTimes('B', @intCast(usize, std.math.max(2 - bishops, 0)));
-    try writer.writeByteNTimes('N', @intCast(usize, std.math.max(2 - knights, 0)));
-    try writer.writeByteNTimes('R', @intCast(usize, std.math.max(2 - rooks, 0)));
-    try writer.writeByteNTimes('Q', @intCast(usize, std.math.max(1 - queens, 0)));
+    const i = affiliation.index();
+    try writer.writeByteNTimes('P', std.math.max(8 - position.pawns[i].count(), 0));
+    try writer.writeByteNTimes('B', std.math.max(2 - position.bishops[i].count(), 0));
+    try writer.writeByteNTimes('N', std.math.max(2 - position.knights[i].count(), 0));
+    try writer.writeByteNTimes('R', std.math.max(2 - position.rooks[i].count(), 0));
+    try writer.writeByteNTimes('Q', std.math.max(1 - position.queens[i].count(), 0));
 }
 
 /// spawn piece at given coord for side to move
@@ -163,7 +136,6 @@ pub fn spawn(position: *Position, class: Class, coord: Coordinate) Move.Result {
         if (coord.eql(position.side_to_move.hRookCoord()))
             position.meta.setCastleKing(position.side_to_move, true);
     }
-    position.side_to_move = position.side_to_move.opponent();
 
     // update class bitboard
     switch (class) {
@@ -175,6 +147,7 @@ pub fn spawn(position: *Position, class: Class, coord: Coordinate) Move.Result {
         .king => {},
     }
 
+    position.side_to_move = position.side_to_move.opponent();
     return position.checksAndMates();
 }
 
@@ -338,6 +311,8 @@ pub fn findMoves(position: Position, buffer: []Move, coords: Bitboard, target: C
                 p.doMove(move);
                 if (p.inCheck(position.at(coord).affiliation().?))
                     continue :move_loop;
+                if (i >= buffer.len)
+                    return error.BufferOverflow;
                 buffer[i] = move;
                 i += 1;
             }
@@ -360,282 +335,23 @@ pub fn inCheck(position: Position, affiliation: Affiliation) bool {
     return false;
 }
 
-/// returns if current side to move has casling rights
-/// for given direction
-pub fn canCastle(position: Position, kingside: bool) bool {
-    return if (kingside)
-        position.meta.castleKing(position.side_to_move)
-    else
-        position.meta.castleQueen(position.side_to_move);
-}
-
-/// attempt to castle, pending validation
-pub fn castle(position: *Position, kingside: bool) Move.Result {
-    if (!position.canCastle(kingside))
-        return .bad_castle_king_or_rook_moved;
-
-    // cannot castle out of check
-    var buffer: [32]Coordinate = undefined;
-    const checker = position.query(&buffer, .{
-        .affiliation = position.side_to_move.opponent(),
-        .attacking = true,
-        .target_coord = position.kingCoord(),
-    });
-    if (checker.len > 0)
-        return .bad_castle_in_check;
-
-    // cannot castle through check
-    const file_delta: i8 = if (kingside) 3 else -4;
-    var iter = DirectionalIterator.initWithDest(position.kingCoord(), position.kingCoord().offsetted(file_delta, 0).?) catch unreachable;
-    while (iter.next()) |coord| {
-        if (!position.at(coord).isEmpty())
-            return .blocked;
-        const attackers = position.query(&buffer, .{
-            .affiliation = position.side_to_move.opponent(),
-            .attacking = true,
-            .target_coord = coord,
-        });
-        if (attackers.len > 0)
-            return .bad_castle_through_check;
-    }
-
-    return position.makeMove(Move.init(
-        position.kingCoord(),
-        position.kingCoord().offsettedDir(if (kingside) .east else .west, 2).?,
-        .castle,
-    ));
-}
-
-/// options for making querys with Board.query()
-pub const Query = struct {
-    /// search for pieces of this class
-    class: ?Class = null,
-    /// search for pieces of this affiliation
-    affiliation: ?Affiliation = null,
-    /// search for pieces that can move here
-    target_coord: ?Coordinate = null,
-    /// search for pieces that can capture on target_coord
-    /// needed because pawns capture differently than they move
-    attacking: ?bool = null,
-    /// search for pieces on this file
-    source_file: ?File = null,
-    /// search for pieces on this rank
-    source_rank: ?Rank = null,
-    /// query position as if this move was made
-    hypothetical_move: ?Move = null,
-    /// exclude kings from results
-    exclude_king: bool = false,
-};
-
-/// query's the position for pieces meeting constraints defined in `query_expr`
-/// **buffer:** buffer to write results to
-/// **query_expr:** constraints to search for
-/// **returns:** slice into `buffer` containing 1d coordinates of matching pieces
-pub fn query(position: Position, buffer: *[32]Coordinate, query_expr: Query) []const Coordinate {
-    var count: usize = 0;
-
-    var duped = position.dupe();
-    if (query_expr.hypothetical_move) |move|
-        duped.doMove(move);
-
-    // write initial pieces with expected affiliation
-    for (duped.squares, 0..) |piece, i| {
-        if (!piece.isEmpty()) {
-            if (query_expr.exclude_king and piece.class().? == .king)
-                continue;
-            if (query_expr.affiliation) |affiliation| {
-                if (piece.affiliation().? == affiliation) {
-                    buffer[count] = Coordinate.from1d(@intCast(i8, i));
-                    count += 1;
-                }
-            } else {
-                buffer[count] = Coordinate.from1d(@intCast(i8, i));
-                count += 1;
-            }
-        }
-    }
-
-    // filter with expected class
-    if (query_expr.class) |class| {
-        var i: usize = 0;
-        while (i < count) {
-            const piece = duped.at(buffer[i]);
-            if (piece.class().? != class) {
-                // swap and pop delete
-                buffer[i] = buffer[count - 1];
-                count -= 1;
-            } else i += 1;
-        }
-    }
-
-    // filter with target_coord
-    if (query_expr.target_coord) |coord| {
-        var i: usize = 0;
-        while (i < count) {
-            if (!duped.hasVisability(buffer[i], coord, query_expr.attacking orelse false)) {
-                // swap and pop delete
-                buffer[i] = buffer[count - 1];
-                count -= 1;
-            } else i += 1;
-        }
-    }
-
-    // filter with source_file
-    if (query_expr.source_file) |file| {
-        var i: usize = 0;
-        while (i < count) {
-            if (buffer[i].getFile() != file) {
-                // swap and pop delete
-                buffer[i] = buffer[count - 1];
-                count -= 1;
-            } else i += 1;
-        }
-    }
-
-    // filter with source_rank
-    if (query_expr.source_rank) |rank| {
-        var i: usize = 0;
-        while (i < count) {
-            if (buffer[i].getRank() != rank) {
-                // swap and pop delete
-                buffer[i] = buffer[count - 1];
-                count -= 1;
-            } else i += 1;
-        }
-    }
-
-    return buffer[0..count];
-}
-
-/// validate that the piece on source square can move to dest square
-/// does not consider checks
-/// attacking ensures that the source piece can capture on dest, important for pawns
-/// takes source and dest as 1d coordinates
-fn hasVisability(position: *Position, source: Coordinate, dest: Coordinate, attacking: bool) bool {
-    // pawns only attack diagonaly
-    if (attacking and position.at(source).class().? == .pawn and source.getFile() == dest.getFile())
-        return false;
-    var move_iter = MoveIterator.init(position, source) catch unreachable;
-    while (move_iter.next()) |move| {
-        if (move.dest().eql(dest)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/// ensures all squares between source and dest are empty
-fn ensureEmpty(position: Position, source: Coordinate, dest: Coordinate) bool {
-    var iter = DirectionalIterator.initWithDest(source, dest) catch unreachable;
-    while (iter.next()) |coord| {
-        if (!position.at(coord).isEmpty())
-            return false;
-    }
-    return true;
-}
-
-/// determines if affiliated king is in check and cannot
-/// get out of check within a single move
-fn isMate(position: *Position) bool {
-    var checkers_buffer: [32]Coordinate = undefined;
-    const checkers = position.query(&checkers_buffer, .{
-        .affiliation = position.side_to_move.opponent(),
-        .attacking = true,
-        .target_coord = position.kingCoord(),
-    });
-
-    // not even in check
-    if (checkers.len == 0) return false;
-
-    // can the king move to safety
-    var buffer: [32]Coordinate = undefined;
-    const file_start = std.math.clamp(position.kingCoord().getFile().val() - 1, 0, 7);
-    const rank_start = std.math.clamp(position.kingCoord().getRank().val() - 1, 0, 7);
-    const file_end = std.math.clamp(position.kingCoord().getFile().val() + 1, 0, 7);
-    const rank_end = std.math.clamp(position.kingCoord().getRank().val() + 1, 0, 7);
-    var file_iter = File.init(file_start).iterator();
-    while (file_iter.next()) |file| {
-        if (file.val() > file_end) break;
-        var rank_iter = Rank.init(rank_start).iterator();
-        while (rank_iter.next()) |rank| {
-            if (rank.val() > rank_end) break;
-            const coord = Coordinate.from2d(file, rank);
-            // empty or enemy piece
-            if (position.at(coord).isEmpty() or
-                position.at(coord).affiliation().? == position.side_to_move.opponent())
-            {
-                const attackers = position.query(&buffer, .{
-                    .affiliation = position.side_to_move.opponent(),
-                    .attacking = true,
-                    .target_coord = coord,
-                    .hypothetical_move = Move.init(position.kingCoord(), coord, .none),
-                });
-                if (attackers.len == 0)
-                    return false;
-            }
-        }
-    }
-
-    // double checks can't be blocked or captured
-    if (checkers.len > 1)
-        return true;
-
-    // can we capture the checking piece
-    const capturing = position.query(&buffer, .{
-        .affiliation = position.side_to_move,
-        .attacking = true,
-        .target_coord = checkers[0],
-        .exclude_king = true, // king capture handled above
-    });
-    if (capturing.len > 0)
-        return false;
-
-    // can we block the check
-    switch (position.at(checkers[0]).class().?) {
-        // theese pieces cannot be blocked
-        .pawn, .knight, .king => return true,
-        else => {},
-    }
-    var iter = DirectionalIterator.initWithDest(position.kingCoord(), checkers[0]) catch unreachable;
-    while (iter.next()) |c| {
-        const blockers = position.query(&buffer, .{
-            .affiliation = position.side_to_move,
-            .target_coord = c,
-            .exclude_king = true, // cannot block check with king
-        });
-        if (blockers.len > 0)
-            return false;
-    }
-
-    return true;
-}
-
 /// looks for checks, mates, and draws
-fn checksAndMates(position: *Position) Move.Result {
+fn checksAndMates(position: Position) Move.Result {
     if (position.inCheck(position.side_to_move)) {
-        return if (position.isMate())
-            .ok_mate
-        else
-            .ok_check;
+        var buffer: [128]Move = undefined;
+        const moves = movegen.generateMoves(&buffer, position, position.side_to_move) catch unreachable;
+        for (moves) |move| {
+            // filter illegals
+            var p = position;
+            p.doMove(move);
+            if (p.inCheck(position.side_to_move))
+                continue;
+            // a valid move means were no mated
+            return .ok_check;
+        }
+        return .ok_mate;
     }
     return .ok;
-}
-
-/// divide n / d rounding away from zero
-fn div(n: i8, d: i8) i8 {
-    const quotiant = @intToFloat(f32, n) / @intToFloat(f32, d);
-    const sign = std.math.sign(quotiant);
-    const val = @fabs(quotiant);
-    return @floatToInt(i8, @ceil(val) * sign);
-}
-
-/// helper for absolute values
-/// std.math.absInt() errors when val is minInt()
-/// as -minInt() is overflow by 1
-/// we just return maxInt() in this case
-/// off by one but it's fine don't worry about it
-fn abs(val: i8) i8 {
-    return std.math.absInt(val) catch std.math.maxInt(i8);
 }
 
 /// standard chess starting position
