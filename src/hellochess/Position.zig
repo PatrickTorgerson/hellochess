@@ -246,6 +246,19 @@ pub fn doMove(position: *Position, move: Move) void {
         .king => {},
     }
 
+    if (!captured.isEmpty()) {
+        const i = position.side_to_move.opponent().index();
+        position.pieces[i].set(move.dest(), false);
+        switch (captured.class().?) {
+            .queen => position.queens[i].set(move.dest(), false),
+            .rook => position.rooks[i].set(move.dest(), false),
+            .bishop => position.bishops[i].set(move.dest(), false),
+            .knight => position.knights[i].set(move.dest(), false),
+            .pawn => position.pawns[i].set(move.dest(), false),
+            .king => {},
+        }
+    }
+
     position.pieces[position.side_to_move.index()].set(move.source(), false);
     position.pieces[position.side_to_move.index()].set(move.dest(), true);
     position.squares[move.source().index()] = Piece.empty();
