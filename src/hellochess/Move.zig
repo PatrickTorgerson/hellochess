@@ -8,6 +8,7 @@ const std = @import("std");
 
 const Piece = @import("Piece.zig");
 const Coordinate = @import("Coordinate.zig");
+const Meta = @import("Meta.zig");
 const Bitfield = @import("util.zig").Bitfield;
 
 pub const Flag = enum(u4) {
@@ -95,26 +96,35 @@ pub fn format(value: Move, comptime fmt: []const u8, options: std.fmt.FormatOpti
     });
 }
 
+pub const invalid = Move.init(Coordinate.a4, Coordinate.h5, .promote_knight);
+
 /// result of attmpting a move
-pub const Result = enum {
-    ok,
-    ok_check,
-    ok_mate,
-    ok_stalemate,
-    ok_repitition,
-    ok_insufficient_material,
-    ok_en_passant,
+pub const Result = struct {
+    move: Move = Move.invalid,
+    /// position's meta before this move was played
+    prev_meta: Meta,
+    tag: Tag,
 
-    bad_notation,
-    bad_disambiguation,
-    ambiguous_piece,
-    no_such_piece,
-    no_visibility,
-    in_check,
-    enters_check,
-    blocked,
+    pub const Tag = enum {
+        ok,
+        ok_check,
+        ok_mate,
+        ok_stalemate,
+        ok_repitition,
+        ok_insufficient_material,
+        ok_en_passant,
 
-    bad_castle_in_check,
-    bad_castle_through_check,
-    bad_castle_king_or_rook_moved,
+        bad_notation,
+        bad_disambiguation,
+        ambiguous_piece,
+        no_such_piece,
+        no_visibility,
+        in_check,
+        enters_check,
+        blocked,
+
+        bad_castle_in_check,
+        bad_castle_through_check,
+        bad_castle_king_or_rook_moved,
+    };
 };

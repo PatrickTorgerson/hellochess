@@ -142,7 +142,9 @@ pub const MoveIterator = struct {
             {
                 return Move.init(this.coord, affiliation.kingCastleDest(), .castle);
             }
-        } else if (this.i == file_offsets.len + 1) {
+        }
+
+        if (this.i == file_offsets.len + 1) {
             // queenside castle
             this.i += 1;
             if (this.position.meta.castleQueen(affiliation) and
@@ -241,7 +243,7 @@ pub const MoveIterator = struct {
 
     /// determine if the affiliated king can castle in the geven direction
     /// ensures all squres between king and rook are empty and not under attack
-    fn canCastle(this: MoveIterator, affiliation: Affiliation, side: enum(usize) { kingside, queenside }) bool {
+    fn canCastle(this: MoveIterator, affiliation: Affiliation, side: enum(usize) { kingside = 0, queenside = 1 }) bool {
         // cannot castle through pieces
         const dir: Direction = if (side == .kingside) .east else .west;
         const count: i8 = if (side == .kingside) 2 else 3;
@@ -369,6 +371,26 @@ test "movegen - king - castle" {
     };
     try expectMoves(fen2, Coordinate.d8, &black_moves2, black_moves2.len);
     try expectMoves(fen2, Coordinate.e1, &white_moves2, white_moves2.len);
+
+    const fen3 = "r3k2r/8/8/8/8/8/8/R3KN1R w QqkK - 0 1";
+    var black_moves3 = [_]Move{
+        Move.init(Coordinate.e8, Coordinate.g8, .castle),
+        Move.init(Coordinate.e8, Coordinate.c8, .castle),
+        Move.init(Coordinate.e8, Coordinate.d8, .none),
+        Move.init(Coordinate.e8, Coordinate.d7, .none),
+        Move.init(Coordinate.e8, Coordinate.e7, .none),
+        Move.init(Coordinate.e8, Coordinate.f7, .none),
+        Move.init(Coordinate.e8, Coordinate.f8, .none),
+    };
+    var white_moves3 = [_]Move{
+        Move.init(Coordinate.e1, Coordinate.c1, .castle),
+        Move.init(Coordinate.e1, Coordinate.d1, .none),
+        Move.init(Coordinate.e1, Coordinate.d2, .none),
+        Move.init(Coordinate.e1, Coordinate.e2, .none),
+        Move.init(Coordinate.e1, Coordinate.f2, .none),
+    };
+    try expectMoves(fen3, Coordinate.e8, &black_moves3, black_moves3.len);
+    try expectMoves(fen3, Coordinate.e1, &white_moves3, white_moves3.len);
 }
 
 test "movegen - queen" {

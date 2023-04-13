@@ -22,7 +22,7 @@ class: Class = .pawn,
 source_file: ?File = null,
 source_rank: ?Rank = null,
 destination: Coordinate = Coordinate.a1,
-promote_to: ?Class = null,
+promote_to: ?Move.Flag = null,
 expect_capture: bool = false,
 castle_kingside: ?bool = null,
 
@@ -98,10 +98,10 @@ pub fn parse(move_notation: []const u8) ?Notation {
     // promotion
     if (move.len > 1 and move[0] == '=') {
         parsed.promote_to = switch (move[1]) {
-            'N' => .knight,
-            'B' => .bishop,
-            'R' => .rook,
-            'Q' => .queen,
+            'N' => .promote_knight,
+            'B' => .promote_bishop,
+            'R' => .promote_rook,
+            'Q' => .promote_queen,
             else => return null,
         };
         move = move[2..];

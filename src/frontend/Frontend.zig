@@ -72,6 +72,21 @@ const commands = std.ComptimeStringMap(Command, .{
         .help = "args: <EX> ; spawns piece for current affiliation at given coord, eg. Rh8 or e3",
         .dev = true,
     } },
+    .{ "/undo", .{
+        .impl = cmdUndo,
+        .help = "undo the last played move",
+        .dev = true,
+    } },
+    .{ "/redo", .{
+        .impl = cmdRedo,
+        .help = "redo a previously undone move",
+        .dev = true,
+    } },
+    .{ "/rights", .{
+        .impl = cmdRights,
+        .help = "display casling rights, fen style ('Kq', white kingside, black queenside)",
+        .dev = true,
+    } },
 });
 
 /// stores user's input
@@ -98,6 +113,9 @@ win_state: WinState = .ongoing,
 draw_offered: ?chess.Affiliation = null,
 col_white: zcon.Color = zcon.Color.col16(.white),
 col_black: zcon.Color = zcon.Color.col16(.white),
+move_history: [512]chess.Move.Result = undefined,
+move_top: usize = 0,
+move_count: usize = 0,
 
 // TODO: fields for network connection
 
@@ -145,9 +163,12 @@ pub fn runPassAndPlay(this: *Frontend, writer: *zcon.Writer) !void {
 
 /// try to make move, swap turn and return true if successful
 pub fn tryMove(this: *Frontend, move: []const u8) bool {
+    this.move_history[this.move_top].prev_meta = this.position.meta;
     const result = this.position.submitMove(move);
-    this.status = this.statusFromMoveResult(result, move);
-    const success = Frontend.wasSuccessfulMove(result);
+    this.status = this.statusFromMoveResult(result.tag, move);
+    const success = Frontend.wasSuccessfulMove(result.tag);
+    if (success)
+        this.addMove(result);
     return success;
 }
 
@@ -254,6 +275,12 @@ pub fn doCommands(this: *Frontend, input: []const u8) []const u8 {
     } else return "#red no such command";
 }
 
+fn addMove(this: *Frontend, move: chess.Move.Result) void {
+    this.move_history[this.move_top] = move;
+    this.move_top += 1;
+    this.move_count = this.move_top;
+}
+
 fn cmdExit(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
     this.should_exit = true;
@@ -275,6 +302,8 @@ fn cmdReset(this: *Frontend, args: *ArgIterator) []const u8 {
     this.position = chess.Position.init();
     this.win_state = .ongoing;
     this.draw_offered = null;
+    this.move_top = 0;
+    this.move_count = 0;
     return this.confirmationStatus();
 }
 
@@ -283,12 +312,19 @@ fn cmdClear(this: *Frontend, args: *ArgIterator) []const u8 {
     this.position = chess.Position.initEmpty();
     this.win_state = .ongoing;
     this.draw_offered = null;
+    this.move_top = 0;
+    this.move_count = 0;
     return this.confirmationStatus();
 }
 
 fn cmdPass(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
     this.position.side_to_move = this.position.side_to_move.opponent();
+    this.addMove(.{
+        .move = chess.Move.invalid,
+        .prev_meta = this.position.meta,
+        .tag = .ok,
+    });
     return this.confirmationStatus();
 }
 
@@ -299,6 +335,55 @@ fn cmdSpawn(this: *Frontend, args: *ArgIterator) []const u8 {
         return this.statusFromMoveResult(result, "")
     else
         return "#red invalid placement expression, must match '[RNBQK]?[a-h][1-8]'";
+}
+
+fn cmdUndo(this: *Frontend, args: *ArgIterator) []const u8 {
+    _ = args;
+    if (this.move_top == 0)
+        return "#bred no moves left";
+    this.move_top -= 1;
+    const prev_move = this.move_history[this.move_top];
+    if (prev_move.move.bits.bits == chess.Move.invalid.bits.bits)
+        this.position.side_to_move = this.position.side_to_move.opponent()
+    else
+        this.position.undoMove(prev_move.move, prev_move.prev_meta);
+    return this.confirmationStatus();
+}
+
+fn cmdRedo(this: *Frontend, args: *ArgIterator) []const u8 {
+    _ = args;
+    if (this.move_top == this.move_count)
+        return "#bred no moves left";
+    const move = this.move_history[this.move_top];
+    this.move_top += 1;
+    if (move.move.bits.bits == chess.Move.invalid.bits.bits)
+        this.position.side_to_move = this.position.side_to_move.opponent()
+    else
+        this.position.doMove(move.move);
+    return this.confirmationStatus();
+}
+
+fn cmdRights(this: *Frontend, args: *ArgIterator) []const u8 {
+    _ = args;
+    var i: usize = 0;
+
+    if (this.position.meta.castleKing(.white)) {
+        this.status_buffer[i] = 'K';
+        i += 1;
+    }
+    if (this.position.meta.castleKing(.black)) {
+        this.status_buffer[i] = 'k';
+        i += 1;
+    }
+    if (this.position.meta.castleQueen(.white)) {
+        this.status_buffer[i] = 'Q';
+        i += 1;
+    }
+    if (this.position.meta.castleQueen(.black)) {
+        this.status_buffer[i] = 'q';
+        i += 1;
+    }
+    return this.status_buffer[0..i];
 }
 
 fn cmdDraw(this: *Frontend, args: *ArgIterator) []const u8 {
@@ -411,7 +496,7 @@ fn confirmationStatus(this: *Frontend) []const u8 {
     return responses[at];
 }
 
-fn statusFromMoveResult(this: *Frontend, move_result: chess.Move.Result, input: []const u8) []const u8 {
+fn statusFromMoveResult(this: *Frontend, move_result: chess.Move.Result.Tag, input: []const u8) []const u8 {
     return switch (move_result) {
         .ok => this.confirmationStatus(),
         .ok_en_passant => "#bgrn En Passant!",
@@ -458,7 +543,7 @@ fn winStatus(this: *Frontend) []const u8 {
         "#grn checkmate! black wins!";
 }
 
-fn wasSuccessfulMove(move_result: chess.Move.Result) bool {
+fn wasSuccessfulMove(move_result: chess.Move.Result.Tag) bool {
     return switch (move_result) {
         .ok,
         .ok_en_passant,
@@ -484,7 +569,7 @@ fn wasSuccessfulMove(move_result: chess.Move.Result) bool {
     };
 }
 
-fn spawnPiece(this: *Frontend, expr: []const u8) ?chess.Move.Result {
+fn spawnPiece(this: *Frontend, expr: []const u8) ?chess.Move.Result.Tag {
     if (expr.len == 0) return null;
     var i: usize = 0;
     const class: chess.Piece.Class = switch (expr[i]) {
@@ -503,6 +588,16 @@ fn spawnPiece(this: *Frontend, expr: []const u8) ?chess.Move.Result {
     if (!chess.Coordinate.isFile(expr[i])) return null;
     if (!chess.Coordinate.isRank(expr[i + 1])) return null;
     const coord = chess.Coordinate.fromString(expr[i .. i + 2]);
+
+    if (coord.getRank() == this.position.side_to_move.opponent().backRank() and class == .pawn)
+        return null;
+
+    this.addMove(.{
+        .move = chess.Move.init(coord, coord, .none),
+        .prev_meta = this.position.meta,
+        .tag = .ok,
+    });
+
     return this.position.spawn(class, coord);
 }
 

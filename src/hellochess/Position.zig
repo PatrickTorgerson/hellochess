@@ -117,7 +117,7 @@ pub fn writeCapturedPieces(position: Position, writer: anytype, affiliation: Aff
 }
 
 /// spawn piece at given coord for side to move
-pub fn spawn(position: *Position, class: Class, coord: Coordinate) Move.Result {
+pub fn spawn(position: *Position, class: Class, coord: Coordinate) Move.Result.Tag {
     const piece = Piece.init(class, position.side_to_move);
     position.squares[coord.index()] = piece;
     position.pieces[position.side_to_move.index()].set(coord, true);
@@ -159,14 +159,9 @@ pub fn doMove(position: *Position, move: Move) void {
 
     position.meta.setEnpassantFile(null);
 
-    if (piece.class().? == .king) {
-        position.kings[position.side_to_move.index()] = move.dest();
-        position.meta.setCastleKing(position.side_to_move, false);
-        position.meta.setCastleQueen(position.side_to_move, false);
-    }
-
     if (move.promotion()) |promotion_class| {
         piece = Piece.init(promotion_class, position.side_to_move);
+        position.pawns[position.side_to_move.index()].set(move.source(), false);
     } else switch (move.flag()) {
         .none => {},
         .enpassant_capture => {
@@ -186,6 +181,10 @@ pub fn doMove(position: *Position, move: Move) void {
                 move.dest().offsettedDir(.east, 1).?;
             position.squares[rook_source.index()] = Piece.empty();
             position.squares[rook_dest.index()] = Piece.init(.rook, position.side_to_move);
+            position.pieces[position.side_to_move.index()].set(rook_source, false);
+            position.pieces[position.side_to_move.index()].set(rook_dest, true);
+            position.rooks[position.side_to_move.index()].set(rook_source, false);
+            position.rooks[position.side_to_move.index()].set(rook_dest, true);
         },
         .pawn_double_push => {
             const file = move.source().getFile();
@@ -216,7 +215,11 @@ pub fn doMove(position: *Position, move: Move) void {
             position.pawns[position.side_to_move.index()].set(move.source(), false);
             position.pawns[position.side_to_move.index()].set(move.dest(), true);
         },
-        .king => {},
+        .king => {
+            position.kings[position.side_to_move.index()] = move.dest();
+            position.meta.setCastleKing(position.side_to_move, false);
+            position.meta.setCastleQueen(position.side_to_move, false);
+        },
     }
 
     if (!captured.isEmpty()) {
@@ -237,7 +240,6 @@ pub fn doMove(position: *Position, move: Move) void {
     position.squares[move.source().index()] = Piece.empty();
     position.squares[move.dest().index()] = piece;
     position.ply += 1;
-    position.side_to_move = position.side_to_move.opponent();
 
     position.meta.setCapturedPiece(captured);
     position.meta.incFiftyCounter();
@@ -253,38 +255,161 @@ pub fn doMove(position: *Position, move: Move) void {
         position.meta.setCastleKing(.black, false);
     if (move.dest().eql(Coordinate.a8) or move.source().eql(Coordinate.a8))
         position.meta.setCastleQueen(.black, false);
+
+    position.side_to_move = position.side_to_move.opponent();
+}
+
+pub fn undoMove(position: *Position, move: Move, prev_meta: Meta) void {
+    position.side_to_move = position.side_to_move.opponent();
+
+    const piece = if (move.promotion()) |class| blk: {
+        switch (class) {
+            .queen => position.queens[position.side_to_move.index()].set(move.dest(), false),
+            .rook => position.rooks[position.side_to_move.index()].set(move.dest(), false),
+            .bishop => position.bishops[position.side_to_move.index()].set(move.dest(), false),
+            .knight => position.knights[position.side_to_move.index()].set(move.dest(), false),
+            else => unreachable,
+        }
+        break :blk Piece.init(.pawn, position.side_to_move);
+    } else position.at(move.dest());
+
+    // update class bitboards
+    switch (piece.class().?) {
+        .queen => {
+            position.queens[position.side_to_move.index()].set(move.source(), true);
+            position.queens[position.side_to_move.index()].set(move.dest(), false);
+        },
+        .rook => {
+            position.rooks[position.side_to_move.index()].set(move.source(), true);
+            position.rooks[position.side_to_move.index()].set(move.dest(), false);
+        },
+        .bishop => {
+            position.bishops[position.side_to_move.index()].set(move.source(), true);
+            position.bishops[position.side_to_move.index()].set(move.dest(), false);
+        },
+        .knight => {
+            position.knights[position.side_to_move.index()].set(move.source(), true);
+            position.knights[position.side_to_move.index()].set(move.dest(), false);
+        },
+        .pawn => {
+            position.pawns[position.side_to_move.index()].set(move.source(), true);
+            position.pawns[position.side_to_move.index()].set(move.dest(), false);
+        },
+        .king => {
+            position.kings[position.side_to_move.index()] = move.source();
+        },
+    }
+
+    if (!position.meta.capturedPiece().isEmpty()) {
+        const i = position.side_to_move.opponent().index();
+        position.pieces[i].set(move.dest(), true);
+        switch (position.meta.capturedPiece().class().?) {
+            .queen => position.queens[i].set(move.dest(), true),
+            .rook => position.rooks[i].set(move.dest(), true),
+            .bishop => position.bishops[i].set(move.dest(), true),
+            .knight => position.knights[i].set(move.dest(), true),
+            .pawn => position.pawns[i].set(move.dest(), true),
+            .king => {},
+        }
+    }
+
+    position.pieces[position.side_to_move.index()].set(move.source(), true);
+    position.pieces[position.side_to_move.index()].set(move.dest(), false);
+    position.squares[move.source().index()] = piece;
+
+    switch (move.flag()) {
+        .enpassant_capture => {
+            const coord = move.dest().offsettedDir(position.side_to_move.reverseDirection(), 1).?;
+            position.squares[coord.index()] = position.meta.capturedPiece();
+            position.squares[move.dest().index()] = Piece.empty();
+        },
+        .castle => {
+            const kingside = move.dest().eql(Coordinate.g1) or move.dest().eql(Coordinate.g8);
+            const rook_source = if (kingside)
+                move.dest().offsettedDir(.east, 1).?
+            else
+                move.dest().offsettedDir(.west, 2).?;
+            const rook_dest = if (kingside)
+                move.dest().offsettedDir(.west, 1).?
+            else
+                move.dest().offsettedDir(.east, 1).?;
+            position.squares[rook_source.index()] = Piece.init(.rook, position.side_to_move);
+            position.squares[rook_dest.index()] = Piece.empty();
+            position.squares[move.dest().index()] = position.meta.capturedPiece();
+            position.pieces[position.side_to_move.index()].set(rook_source, true);
+            position.pieces[position.side_to_move.index()].set(rook_dest, false);
+            position.rooks[position.side_to_move.index()].set(rook_source, true);
+            position.rooks[position.side_to_move.index()].set(rook_dest, false);
+        },
+        else => position.squares[move.dest().index()] = position.meta.capturedPiece(),
+    }
+
+    position.ply -= 1;
+    position.meta = prev_meta;
 }
 
 /// submit move, move to be made pending validation
 /// uses standard chess notation (https://en.wikipedia.org/wiki/Algebraic_notation_(chess))
 pub fn submitMove(position: *Position, move_notation: []const u8) Move.Result {
-    const notation = Notation.parse(move_notation) orelse return .bad_notation;
+    const prev_meta = position.meta;
+    const notation = Notation.parse(move_notation) orelse return .{
+        .tag = .bad_notation,
+        .prev_meta = prev_meta,
+    };
 
     // cannot capture allied pieces
     if (position.at(notation.destination).affiliation()) |affiliation| {
         if (affiliation == position.side_to_move)
-            return .blocked;
+            return .{
+                .tag = .blocked,
+                .prev_meta = prev_meta,
+            };
     }
+
+    const promotion_rank = position.side_to_move.opponent().backRank();
+    const required_flag = if (notation.class == .pawn and notation.destination.getRank() == promotion_rank)
+        notation.promote_to orelse .promote_queen
+    else
+        null;
 
     var buffer: [32]Move = undefined;
     const moves = position.findMoves(
         &buffer,
         position.bitboard(position.side_to_move, notation.class),
         notation.destination,
-        notation.source_file,
-        notation.source_rank,
+        .{ // filters
+            .file = notation.source_file,
+            .rank = notation.source_rank,
+            .flag = required_flag,
+        },
     ) catch unreachable;
 
-    if (moves.len > 1)
-        return .ambiguous_piece;
     if (moves.len == 0)
-        return .no_visibility;
+        return .{
+            .tag = .no_visibility,
+            .prev_meta = prev_meta,
+        };
+    if (moves.len > 1)
+        return .{
+            .tag = .ambiguous_piece,
+            .prev_meta = prev_meta,
+        };
 
     const move = moves[0];
 
     position.doMove(move);
-    return position.checksAndMates();
+    return .{
+        .move = move,
+        .tag = position.checksAndMates(),
+        .prev_meta = prev_meta,
+    };
 }
+
+pub const MoveFilters = struct {
+    file: ?File = null,
+    rank: ?Rank = null,
+    flag: ?Move.Flag = null,
+};
 
 /// returns moves that the marked pieces in `coords` can make
 /// that land on `target` coord. if `coords` marks an empty square
@@ -292,18 +417,20 @@ pub fn submitMove(position: *Position, move_notation: []const u8) Move.Result {
 /// fit all moves error.BufferOverflow is returned
 /// `rank` specifies expected starting rank
 /// `file` specifies expected starting file
-pub fn findMoves(position: Position, buffer: []Move, coords: Bitboard, target: Coordinate, file: ?File, rank: ?Rank) ![]Move {
+pub fn findMoves(position: Position, buffer: []Move, coords: Bitboard, target: Coordinate, filters: MoveFilters) ![]Move {
     var i: usize = 0;
     var coord_iter = coords.iterator();
     coord_loop: while (coord_iter.next()) |coord| {
         if (position.at(coord).isEmpty())
             continue :coord_loop;
-        if (file != null and coord.getFile() != file.?)
+        if (filters.file != null and coord.getFile() != filters.file.?)
             continue :coord_loop;
-        if (rank != null and coord.getRank() != rank.?)
+        if (filters.rank != null and coord.getRank() != filters.rank.?)
             continue :coord_loop;
         var move_iter = try MoveIterator.init(&position, coord);
         move_loop: while (move_iter.next()) |move| {
+            if (filters.flag != null and move.flag() != filters.flag)
+                continue :move_loop;
             if (move.dest().eql(target)) {
                 // MoveIterator returns psuedo legal moves
                 // ensure move is legal
@@ -336,7 +463,7 @@ pub fn inCheck(position: Position, affiliation: Affiliation) bool {
 }
 
 /// looks for checks, mates, and draws
-fn checksAndMates(position: Position) Move.Result {
+fn checksAndMates(position: Position) Move.Result.Tag {
     if (position.inCheck(position.side_to_move)) {
         var buffer: [128]Move = undefined;
         const moves = movegen.generateMoves(&buffer, position, position.side_to_move) catch unreachable;
@@ -346,7 +473,7 @@ fn checksAndMates(position: Position) Move.Result {
             p.doMove(move);
             if (p.inCheck(position.side_to_move))
                 continue;
-            // a valid move means were no mated
+            // a valid move means were not mated
             return .ok_check;
         }
         return .ok_mate;
