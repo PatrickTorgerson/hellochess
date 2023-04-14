@@ -31,64 +31,6 @@ const Command = struct {
     help: []const u8,
 };
 
-const commands = std.ComptimeStringMap(Command, .{
-    .{ "/exit", .{
-        .impl = cmdExit,
-        .help = "quits the game, no saving",
-    } },
-    .{ "/help", .{
-        .impl = cmdHelp,
-        .help = "args: [CMD] ; print a list of available commands, or info on a specific command [CMD]",
-    } },
-    .{ "/reset", .{
-        .impl = cmdReset,
-        .help = "reset the board for a new game",
-    } },
-    .{ "/resign", .{
-        .impl = cmdResign,
-        .help = "resign the game, resulting in a victory for your opponent",
-    } },
-    .{ "/draw", .{
-        .impl = cmdDraw,
-        .help = "offer a draw to your opponent",
-    } },
-    .{ "/flip", .{
-        .impl = cmdFlip,
-        .help = "flip the board perspective",
-    } },
-
-    .{ "/clear", .{
-        .impl = cmdClear,
-        .help = "clear all pieces from the board exept kings",
-        .dev = true,
-    } },
-    .{ "/pass", .{
-        .impl = cmdPass,
-        .help = "passes current turn without making a move",
-        .dev = true,
-    } },
-    .{ "/spawn", .{
-        .impl = cmdSpawn,
-        .help = "args: <EX> ; spawns piece for current affiliation at given coord, eg. Rh8 or e3",
-        .dev = true,
-    } },
-    .{ "/undo", .{
-        .impl = cmdUndo,
-        .help = "undo the last played move",
-        .dev = true,
-    } },
-    .{ "/redo", .{
-        .impl = cmdRedo,
-        .help = "redo a previously undone move",
-        .dev = true,
-    } },
-    .{ "/rights", .{
-        .impl = cmdRights,
-        .help = "display casling rights, fen style ('Kq', white kingside, black queenside)",
-        .dev = true,
-    } },
-});
-
 /// stores user's input
 input_buffer: [64]u8 = undefined,
 /// characters in input_buffer
@@ -208,6 +150,35 @@ pub fn clientMove(this: *Frontend, writer: *zcon.Writer) ![]const u8 {
     }
 
     return input;
+}
+
+pub fn printStatus(this: *Frontend, writer: *zcon.Writer) void {
+    writer.clearLine();
+
+    var start: usize = 0;
+    var end = std.math.min(this.status.len, status_max_width);
+
+    while (end > 0 and end != this.status.len and this.status[end] != ' ')
+        end -= 1;
+
+    writer.fmt("#dgry; {s}#prv;: {s}\n", .{ this.getLastInput(), this.status[start..end] });
+
+    start = end;
+    while (start < this.status.len) {
+        while (start < this.status.len and this.status[start] == ' ')
+            start += 1;
+        end = start + std.math.min(this.status.len - start, status_max_width);
+        while (end > 0 and end != this.status.len and this.status[end] != ' ')
+            end -= 1;
+        writer.clearLine();
+        writer.writeByteNTimes(' ', this.getLastInput().len + 3) catch unreachable;
+        writer.fmt("{s}\n", .{this.status[start..end]});
+        start = end;
+    }
+
+    writer.clearLine();
+    writer.put("\n");
+    writer.useDefaultColors();
 }
 
 /// reads input from stdin
@@ -628,3 +599,63 @@ const ArgIterator = struct {
         return this.str[at..this.i];
     }
 };
+
+const status_max_width = 50;
+
+const commands = std.ComptimeStringMap(Command, .{
+    .{ "/exit", .{
+        .impl = cmdExit,
+        .help = "quit the game, no saving",
+    } },
+    .{ "/help", .{
+        .impl = cmdHelp,
+        .help = "args: [CMD] ; print a list of available commands, or info on a specific command [CMD]",
+    } },
+    .{ "/reset", .{
+        .impl = cmdReset,
+        .help = "reset the board for a new game",
+    } },
+    .{ "/resign", .{
+        .impl = cmdResign,
+        .help = "resign the game, resulting in a victory for your opponent",
+    } },
+    .{ "/draw", .{
+        .impl = cmdDraw,
+        .help = "offer a draw to your opponent, they may or may not accept",
+    } },
+    .{ "/flip", .{
+        .impl = cmdFlip,
+        .help = "flip the board perspective",
+    } },
+
+    .{ "/clear", .{
+        .impl = cmdClear,
+        .help = "clear all pieces from the board except kings",
+        .dev = true,
+    } },
+    .{ "/pass", .{
+        .impl = cmdPass,
+        .help = "pass the current turn without making a move",
+        .dev = true,
+    } },
+    .{ "/spawn", .{
+        .impl = cmdSpawn,
+        .help = "args: <EX> ; spawn a piece for the current affiliation at a given coord, eg. Rh8 or e3",
+        .dev = true,
+    } },
+    .{ "/undo", .{
+        .impl = cmdUndo,
+        .help = "undo the last played move",
+        .dev = true,
+    } },
+    .{ "/redo", .{
+        .impl = cmdRedo,
+        .help = "redo a previously undone move",
+        .dev = true,
+    } },
+    .{ "/rights", .{
+        .impl = cmdRights,
+        .help = "display casling rights, fen style, k for kingside, q for queenside, lowercase for black, uppercase for white",
+        .dev = true,
+    } },
+});

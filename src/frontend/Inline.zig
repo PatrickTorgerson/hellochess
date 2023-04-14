@@ -15,7 +15,7 @@ const zcon = @import("zcon");
 const Frontend = @import("Frontend.zig");
 
 /// characters high the rendering area is
-const render_height = 20;
+const render_height = 25;
 /// characters wide the rendering area is
 const render_width = 128;
 const col_white = zcon.Color.col16(.bright_yellow);
@@ -34,21 +34,16 @@ pub fn run(this: *@This(), writer: *zcon.Writer) !void {
     this.frontend.col_white = col_white;
     this.frontend.col_black = col_black;
 
-    primeBuffer(writer);
+    primeBuffer(writer, render_height);
     writer.saveCursor();
 
     while (true) {
         writer.restoreCursor();
         writer.put("\n");
         try this.renderBoard(writer);
-
-        // status line
-        writer.clearLine();
-        writer.fmt(" #dgry {s}#def : {s}\n\n", .{ this.frontend.getLastInput(), this.frontend.status });
-        writer.useDefaultColors();
-
+        primeBuffer(writer, render_height - 20);
+        this.frontend.printStatus(writer);
         try this.frontend.doTurn(writer);
-
         if (this.frontend.should_exit)
             break;
     }
@@ -58,12 +53,13 @@ pub fn run(this: *@This(), writer: *zcon.Writer) !void {
 /// write spaces to the area we will be rendering to
 /// this is important to keep the board rendering in place
 /// (without scrolling) on smaller buffers
-fn primeBuffer(writer: *zcon.Writer) void {
+fn primeBuffer(writer: *zcon.Writer, count: i16) void {
     var i: i32 = 0;
-    while (i < render_height) : (i += 1)
-        writer.fmt("{s: <[w]}\n", .{ .s = " ", .w = render_width });
-    writer.setCursorX(1);
-    writer.cursorUp(render_height);
+    while (i < count) : (i += 1) {
+        writer.clearLine();
+        writer.put("\n");
+    }
+    writer.cursorUp(count);
 }
 
 /// writes the chess board to the buffer
