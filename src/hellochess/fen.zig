@@ -23,6 +23,7 @@ const Bitboard = @import("Bitboard.zig");
 const Affiliation = Piece.Affiliation;
 const Class = Piece.Class;
 const File = Coordinate.File;
+const Rank = Coordinate.Rank;
 
 pub const starting_position = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -42,6 +43,8 @@ pub const Error = error{
 /// lieniant parsing:
 ///  - arbitrary number of delimiting spaces
 ///  - duplicate castling rights ignored
+///  - leading single quotes and double quotes ignored
+///  - trailing single quotes and double quotes ignored
 pub fn parse(fen: []const u8) Error!Position {
     @setEvalBranchQuota(1500);
 
@@ -60,6 +63,9 @@ pub fn parse(fen: []const u8) Error!Position {
     };
 
     var fen_index: usize = 0;
+    while (fen_index < fen.len and (fen[fen_index] == '\'' or fen[fen_index] == '\"'))
+        fen_index += 1;
+
     while (fen_index < fen.len and fen[fen_index] == ' ')
         fen_index += 1;
     if (fen_index >= fen.len)
@@ -193,7 +199,7 @@ pub fn parse(fen: []const u8) Error!Position {
 
     // -- field 6 : full move counter
     end = fen_index;
-    while (end < fen.len and fen[end] != ' ')
+    while (end < fen.len and fen[end] != ' ' and fen[end] != '\'' and fen[end] != '\"')
         end += 1;
 
     const fullmove = std.fmt.parseInt(i32, fen[fen_index..end], 10) catch return Error.invalid_counter;
@@ -205,10 +211,84 @@ pub fn parse(fen: []const u8) Error!Position {
 }
 
 /// write `position` to `writer` as fen string
-pub fn writePosition(writer: anytype, position: Position) void {
-    _ = position;
-    _ = writer;
-    unreachable; // TODO: implement
+pub fn writePosition(writer: anytype, position: Position) !void {
+    var index: usize = 0;
+
+    // -- field 1 : piece placement data
+    var empty_count: i32 = 0;
+    while (index < 64) : (index += 1) {
+        const piece = position.squares[index];
+
+        if (piece.isEmpty()) {
+            empty_count += 1;
+        } else {
+            if (empty_count > 0) {
+                try writer.print("{}", .{empty_count});
+                empty_count = 0;
+            }
+
+            var char = piece.character();
+            if (piece.affiliation().? == .black)
+                char = std.ascii.toLower(char);
+            try writer.writeByte(char);
+        }
+
+        if ((index + 1) % 8 == 0) {
+            if (empty_count > 0) {
+                try writer.print("{}", .{empty_count});
+                empty_count = 0;
+            }
+            if (index != 63)
+                try writer.writeByte('/');
+        }
+    }
+
+    // -- field 2 : side to move
+    try writer.writeByte(' ');
+    try writer.writeByte(switch (position.side_to_move) {
+        .white => 'w',
+        .black => 'b',
+    });
+
+    // -- field 3 : castling rights
+    try writer.writeByte(' ');
+    if (position.meta.castleKing(.white))
+        try writer.writeByte('K');
+    if (position.meta.castleQueen(.white))
+        try writer.writeByte('Q');
+    if (position.meta.castleKing(.black))
+        try writer.writeByte('k');
+    if (position.meta.castleQueen(.black))
+        try writer.writeByte('q');
+    if (!position.meta.castleKing(.white) and
+        !position.meta.castleQueen(.white) and
+        !position.meta.castleKing(.black) and
+        !position.meta.castleQueen(.black))
+    {
+        try writer.writeByte('-');
+    }
+
+    // -- field 4 : En Passant target
+    try writer.writeByte(' ');
+    if (position.meta.enpassantFile()) |file| {
+        const rank = switch (position.side_to_move) {
+            .white => Rank.rank_6,
+            .black => Rank.rank_3,
+        };
+        try writer.print("{s}", .{Coordinate.from2d(file, rank).toString()});
+    } else try writer.writeByte('-');
+
+    // -- field 5 : fifty move counter
+    try writer.writeByte(' ');
+    try writer.print("{}", .{position.meta.fiftyCounter()});
+
+    // -- field 6 : full move counter
+    try writer.writeByte(' ');
+    var fullmove = position.ply;
+    if (position.side_to_move == .black)
+        fullmove -= 1;
+    fullmove = @divTrunc(fullmove, 2) + 1;
+    try writer.print("{}", .{fullmove});
 }
 
 test "fen parse starting_position" {

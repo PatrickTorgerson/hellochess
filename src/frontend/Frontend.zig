@@ -32,7 +32,7 @@ const Command = struct {
 };
 
 /// stores user's input
-input_buffer: [64]u8 = undefined,
+input_buffer: [128]u8 = undefined,
 /// characters in input_buffer
 input_size: usize = 0,
 /// helps stores text for status line
@@ -53,11 +53,18 @@ should_exit: bool,
 win_state: WinState = .ongoing,
 /// a player offers a draw
 draw_offered: ?chess.Affiliation = null,
+/// color associated with white pieces
 col_white: zcon.Color = zcon.Color.col16(.white),
+/// color associated with blac pieces
 col_black: zcon.Color = zcon.Color.col16(.white),
+/// history of moves played
 move_history: [512]chess.Move.Result = undefined,
+/// last move played or undone
 move_top: usize = 0,
+/// number of moves in move_history
 move_count: usize = 0,
+/// do not wrap status line next print only
+no_wrap: bool = false,
 
 // TODO: fields for network connection
 
@@ -91,8 +98,11 @@ pub fn doTurn(this: *Frontend, writer: *zcon.Writer) !void {
 /// turn logic for pass and play mode, returns true if exit is requested
 pub fn runPassAndPlay(this: *Frontend, writer: *zcon.Writer) !void {
     const move = try this.clientMove(writer);
+    if (move.len == 0)
+        return;
     if (isCommand(move))
         return;
+
     _ = this.tryMove(move);
 
     if (this.draw_offered != null and this.draw_offered.? != this.position.side_to_move) {
@@ -123,6 +133,9 @@ pub fn clientMove(this: *Frontend, writer: *zcon.Writer) ![]const u8 {
     writer.flush();
 
     const input = try this.readInput();
+
+    if (input.len == 0)
+        return input;
 
     if (this.win_state != .ongoing) {
         var iter = ArgIterator.init(input);
@@ -155,25 +168,30 @@ pub fn clientMove(this: *Frontend, writer: *zcon.Writer) ![]const u8 {
 pub fn printStatus(this: *Frontend, writer: *zcon.Writer) void {
     writer.clearLine();
 
-    var start: usize = 0;
-    var end = std.math.min(this.status.len, status_max_width);
+    if (this.no_wrap) {
+        this.no_wrap = false;
+        writer.fmt("#dgry; {s}#prv;: {s}\n", .{ this.getLastInput(), this.status });
+    } else {
+        var start: usize = 0;
+        var end = std.math.min(this.status.len, status_max_width);
 
-    while (end > 0 and end != this.status.len and this.status[end] != ' ')
-        end -= 1;
+        while (end < this.status.len and this.status[end] != ' ')
+            end += 1;
 
-    writer.fmt("#dgry; {s}#prv;: {s}\n", .{ this.getLastInput(), this.status[start..end] });
+        writer.fmt("#dgry; {s}#prv;: {s}\n", .{ this.getLastInput(), this.status[start..end] });
 
-    start = end;
-    while (start < this.status.len) {
-        while (start < this.status.len and this.status[start] == ' ')
-            start += 1;
-        end = start + std.math.min(this.status.len - start, status_max_width);
-        while (end > 0 and end != this.status.len and this.status[end] != ' ')
-            end -= 1;
-        writer.clearLine();
-        writer.writeByteNTimes(' ', this.getLastInput().len + 3) catch unreachable;
-        writer.fmt("{s}\n", .{this.status[start..end]});
         start = end;
+        while (start < this.status.len) {
+            while (start < this.status.len and this.status[start] == ' ')
+                start += 1;
+            end = start + std.math.min(this.status.len - start, status_max_width);
+            while (end < this.status.len and this.status[end] != ' ')
+                end += 1;
+            writer.clearLine();
+            writer.writeByteNTimes(' ', this.getLastInput().len + 3) catch unreachable;
+            writer.fmt("{s}\n", .{this.status[start..end]});
+            start = end;
+        }
     }
 
     writer.clearLine();
@@ -183,9 +201,22 @@ pub fn printStatus(this: *Frontend, writer: *zcon.Writer) void {
 
 /// reads input from stdin
 pub fn readInput(this: *Frontend) ![]const u8 {
-    const count = try std.io.getStdIn().read(&this.input_buffer) - 2;
-    this.input_size = count;
-    return this.input_buffer[0..count];
+    this.input_size = 0;
+    const stdin = std.io.getStdIn().reader();
+    if (stdin.readUntilDelimiterOrEof(this.input_buffer[0..], '\n') catch |e| switch (e) {
+        error.StreamTooLong => {
+            while (try stdin.read(this.input_buffer[0..]) == this.input_buffer.len) {}
+            this.status = "#bred input too long";
+            return "";
+        },
+        else => return e,
+    }) |input| {
+        const line = std.mem.trimRight(u8, input[0..], "\r\n ");
+        this.input_size = line.len;
+        return this.input_buffer[0..this.input_size];
+    }
+    this.input_size = 0;
+    return "";
 }
 
 /// returns the previous input
@@ -355,6 +386,21 @@ fn cmdRights(this: *Frontend, args: *ArgIterator) []const u8 {
         i += 1;
     }
     return this.status_buffer[0..i];
+}
+
+fn cmdLoad(this: *Frontend, args: *ArgIterator) []const u8 {
+    const fen = args.rest() orelse return "#bred expected fen string";
+    this.position = chess.fen.parse(fen) catch return "#bred failed to parse fen";
+    return this.confirmationStatus();
+}
+
+fn cmdFen(this: *Frontend, args: *ArgIterator) []const u8 {
+    _ = args;
+    var stream = std.io.fixedBufferStream(&this.status_buffer);
+    var writer = stream.writer();
+    chess.fen.writePosition(writer, this.position) catch return "#bred write error";
+    this.no_wrap = true;
+    return this.status_buffer[0..stream.pos];
 }
 
 fn cmdDraw(this: *Frontend, args: *ArgIterator) []const u8 {
@@ -583,6 +629,10 @@ const ArgIterator = struct {
         };
     }
 
+    /// return the next arg in the string
+    /// args are delimited by spaces
+    /// redundant spaces are ignored
+    /// args my be surrounded in quotes to include spaces
     pub fn next(this: *ArgIterator) ?[]const u8 {
         if (this.str.len == 0) return null;
         while (this.i < this.str.len and this.str[this.i] == ' ')
@@ -594,9 +644,20 @@ const ArgIterator = struct {
         else
             ' ';
         const at = if (end_char == ' ') this.i else this.i + 1;
+        this.i = at;
         while (this.i < this.str.len and this.str[this.i] != end_char)
             this.i += 1;
         return this.str[at..this.i];
+    }
+
+    /// return the remaining test in the string
+    pub fn rest(this: *ArgIterator) ?[]const u8 {
+        if (this.str.len == 0) return null;
+        while (this.i < this.str.len and this.str[this.i] == ' ')
+            this.i += 1;
+        if (this.i >= this.str.len) return null;
+        defer this.i = this.str.len;
+        return this.str[this.i..];
     }
 };
 
@@ -627,6 +688,14 @@ const commands = std.ComptimeStringMap(Command, .{
         .impl = cmdFlip,
         .help = "flip the board perspective",
     } },
+    .{ "/load", .{
+        .impl = cmdLoad,
+        .help = "args: <FEN> ; load a position from the fen string <FEN>",
+    } },
+    .{ "/fen", .{
+        .impl = cmdFen,
+        .help = "displays the cuurren position as a fen string",
+    } },
 
     .{ "/clear", .{
         .impl = cmdClear,
@@ -651,11 +720,6 @@ const commands = std.ComptimeStringMap(Command, .{
     .{ "/redo", .{
         .impl = cmdRedo,
         .help = "redo a previously undone move",
-        .dev = true,
-    } },
-    .{ "/rights", .{
-        .impl = cmdRights,
-        .help = "display casling rights, fen style, k for kingside, q for queenside, lowercase for black, uppercase for white",
         .dev = true,
     } },
 });

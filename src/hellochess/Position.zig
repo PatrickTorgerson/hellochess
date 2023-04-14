@@ -109,11 +109,11 @@ pub fn countMaterial(position: Position, affiliation: Affiliation) i32 {
 /// write pieces missing from affiliated posistion
 pub fn writeCapturedPieces(position: Position, writer: anytype, affiliation: Affiliation) !void {
     const i = affiliation.index();
-    try writer.writeByteNTimes('P', std.math.max(8 - position.pawns[i].count(), 0));
-    try writer.writeByteNTimes('B', std.math.max(2 - position.bishops[i].count(), 0));
-    try writer.writeByteNTimes('N', std.math.max(2 - position.knights[i].count(), 0));
-    try writer.writeByteNTimes('R', std.math.max(2 - position.rooks[i].count(), 0));
-    try writer.writeByteNTimes('Q', std.math.max(1 - position.queens[i].count(), 0));
+    try writer.writeByteNTimes('P', 8 -| position.pawns[i].count());
+    try writer.writeByteNTimes('B', 2 -| position.bishops[i].count());
+    try writer.writeByteNTimes('N', 2 -| position.knights[i].count());
+    try writer.writeByteNTimes('R', 2 -| position.rooks[i].count());
+    try writer.writeByteNTimes('Q', 1 -| position.queens[i].count());
 }
 
 /// spawn piece at given coord for side to move
