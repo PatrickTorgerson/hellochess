@@ -119,8 +119,14 @@ pub fn writeCapturedPieces(position: Position, writer: anytype, affiliation: Aff
 /// spawn piece at given coord for side to move
 pub fn spawn(position: *Position, class: Class, coord: Coordinate) Move.Result.Tag {
     const piece = Piece.init(class, position.side_to_move);
+
+    if (!position.squares[coord.index()].isEmpty())
+        position.meta.setCapturedPiece(position.squares[coord.index()]);
+
     position.squares[coord.index()] = piece;
     position.pieces[position.side_to_move.index()].set(coord, true);
+    position.pieces[position.side_to_move.opponent().index()].set(coord, false);
+
     if (class == .king) {
         position.squares[position.kingCoord().index()] = Piece.empty();
         position.kings[position.side_to_move.index()] = coord;
@@ -139,11 +145,26 @@ pub fn spawn(position: *Position, class: Class, coord: Coordinate) Move.Result.T
 
     // update class bitboard
     switch (class) {
-        .queen => position.queens[position.side_to_move.index()].set(coord, true),
-        .rook => position.rooks[position.side_to_move.index()].set(coord, true),
-        .bishop => position.bishops[position.side_to_move.index()].set(coord, true),
-        .knight => position.knights[position.side_to_move.index()].set(coord, true),
-        .pawn => position.pawns[position.side_to_move.index()].set(coord, true),
+        .queen => {
+            position.queens[position.side_to_move.index()].set(coord, true);
+            position.queens[position.side_to_move.opponent().index()].set(coord, false);
+        },
+        .rook => {
+            position.rooks[position.side_to_move.index()].set(coord, true);
+            position.rooks[position.side_to_move.opponent().index()].set(coord, false);
+        },
+        .bishop => {
+            position.bishops[position.side_to_move.index()].set(coord, true);
+            position.bishops[position.side_to_move.opponent().index()].set(coord, false);
+        },
+        .knight => {
+            position.knights[position.side_to_move.index()].set(coord, true);
+            position.knights[position.side_to_move.opponent().index()].set(coord, false);
+        },
+        .pawn => {
+            position.pawns[position.side_to_move.index()].set(coord, true);
+            position.pawns[position.side_to_move.opponent().index()].set(coord, false);
+        },
         .king => {},
     }
 
@@ -352,10 +373,19 @@ pub fn undoMove(position: *Position, move: Move, prev_meta: Meta) void {
 /// uses standard chess notation (https://en.wikipedia.org/wiki/Algebraic_notation_(chess))
 pub fn submitMove(position: *Position, move_notation: []const u8) Move.Result {
     const prev_meta = position.meta;
-    const notation = Notation.parse(move_notation) orelse return .{
+    var notation = Notation.parse(move_notation) orelse return .{
         .tag = .bad_notation,
         .prev_meta = prev_meta,
     };
+
+    if (notation.castle_kingside) |kingside| {
+        notation.class = .king;
+        notation.source_file = .file_e;
+        if (kingside)
+            notation.destination = position.side_to_move.kingCastleDest()
+        else
+            notation.destination = position.side_to_move.queenCastleDest();
+    }
 
     // cannot capture allied pieces
     if (position.at(notation.destination).affiliation()) |affiliation| {

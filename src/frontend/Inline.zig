@@ -27,7 +27,7 @@ frontend: Frontend,
 
 /// runs the inline frontend
 pub fn run(this: *@This(), writer: *zcon.Writer) !void {
-    writer.put("\n#wht ============= Hello Chess =============\n#dgry /exit to exit, /help for more commands#prv#prv\n");
+    writer.put("\n#wht ================ Hello Chess ================\n    #dgry /exit to exit, /help for more commands#prv#prv\n");
     writer.indent(1);
 
     // set color used for move prompts
@@ -46,6 +46,11 @@ pub fn run(this: *@This(), writer: *zcon.Writer) !void {
         try this.frontend.doTurn(writer);
         if (this.frontend.should_exit)
             break;
+        writer.restoreCursor();
+        writer.setCursorX(28);
+        writer.cursorDown(2);
+        this.frontend.printHistory(writer, 12);
+        writer.flush();
     }
     writer.put("\n");
 }
@@ -89,7 +94,9 @@ fn renderBoard(this: @This(), writer: *zcon.Writer) !void {
                 writer.useDefaultColors();
             }
         }
-        writer.fmt("#dgry {}\n", .{rank.val() + 1});
+        writer.fmt("#dgry {}", .{rank.val() + 1});
+        writer.cursorDown(1);
+        writer.cursorLeft(19);
     }
 
     this.drawFileLine(writer);

@@ -59,6 +59,11 @@ col_white: zcon.Color = zcon.Color.col16(.white),
 col_black: zcon.Color = zcon.Color.col16(.white),
 /// history of moves played
 move_history: [512]chess.Move.Result = undefined,
+/// stored tesxt data for moves made
+move_slice_buffer: [512 * 4]u8 = undefined,
+/// slices into `move_slice_buffer` representinf textual
+/// representations of move history
+move_slices: [512][]const u8 = undefined,
 /// last move played or undone
 move_top: usize = 0,
 /// number of moves in move_history
@@ -120,7 +125,7 @@ pub fn tryMove(this: *Frontend, move: []const u8) bool {
     this.status = this.statusFromMoveResult(result.tag, move);
     const success = Frontend.wasSuccessfulMove(result.tag);
     if (success)
-        this.addMove(result);
+        this.addMove(result) catch unreachable;
     return success;
 }
 
@@ -197,6 +202,51 @@ pub fn printStatus(this: *Frontend, writer: *zcon.Writer) void {
     writer.clearLine();
     writer.put("\n");
     writer.useDefaultColors();
+}
+
+pub fn printHistory(this: *Frontend, writer: *zcon.Writer, lines: i32) void {
+    var start = std.math.min(
+        this.move_top -| 1,
+        this.move_count -| @intCast(usize, lines * 2) + 1,
+    );
+    if (start % 2 == 1)
+        start -= 1;
+    var i = start;
+
+    while (i - start < lines * 2) : (i += 2) {
+        writer.put("                          ");
+        writer.cursorLeft(26);
+
+        if (i >= this.move_count) {
+            writer.cursorDown(1);
+            continue;
+        }
+
+        const turn = (i / 2) + 1;
+        writer.fmt("#dgry;{: >2}.#prv; ", .{turn});
+
+        if (this.move_top > 0 and i == this.move_top - 1)
+            writer.setForeground(zcon.Color.col16(.green));
+
+        writer.fmt("{s}", .{this.move_slices[i]});
+        writer.useDefaultColors();
+        const white_len = @intCast(i16, this.move_slices[i].len + 4);
+        if (i + 1 >= this.move_count) {
+            writer.cursorDown(1);
+            writer.cursorLeft(white_len);
+            continue;
+        }
+
+        writer.put(" #dgry;..#prv; ");
+        if (this.move_top > 0 and i + 1 == this.move_top - 1)
+            writer.setForeground(zcon.Color.col16(.green));
+
+        writer.fmt("{s}", .{this.move_slices[i + 1]});
+        writer.useDefaultColors();
+
+        writer.cursorDown(1);
+        writer.cursorLeft(white_len + @intCast(i16, this.move_slices[i + 1].len + 4));
+    }
 }
 
 /// reads input from stdin
@@ -277,10 +327,64 @@ pub fn doCommands(this: *Frontend, input: []const u8) []const u8 {
     } else return "#red no such command";
 }
 
-fn addMove(this: *Frontend, move: chess.Move.Result) void {
+fn addMove(this: *Frontend, move: chess.Move.Result) !void {
+    try this.writeMoveText(move);
     this.move_history[this.move_top] = move;
     this.move_top += 1;
     this.move_count = this.move_top;
+}
+
+fn writeMoveText(this: *Frontend, move: chess.Move.Result) !void {
+    const castle_king_black = chess.Move.init(chess.Coordinate.e8, chess.Coordinate.g8, .castle).bits.bits;
+    const castle_queen_black = chess.Move.init(chess.Coordinate.e8, chess.Coordinate.c8, .castle).bits.bits;
+    const castle_king_white = chess.Move.init(chess.Coordinate.e1, chess.Coordinate.g1, .castle).bits.bits;
+    const castle_queen_white = chess.Move.init(chess.Coordinate.e1, chess.Coordinate.c1, .castle).bits.bits;
+
+    const start = if (this.move_top == 0)
+        0
+    else
+        @ptrToInt(this.move_slices[this.move_top - 1].ptr) - @ptrToInt(&this.move_slice_buffer[0]) + this.move_slices[this.move_top - 1].len;
+    var stream = std.io.fixedBufferStream(this.move_slice_buffer[start..]);
+    var writer = stream.writer();
+
+    if (move.move.bits.bits == chess.Move.invalid.bits.bits) {
+        try writer.writeAll("pass");
+    } else if (move.move.bits.bits == castle_king_black or move.move.bits.bits == castle_king_white) {
+        try writer.writeAll("O-O");
+    } else if (move.move.bits.bits == castle_queen_black or move.move.bits.bits == castle_queen_white) {
+        try writer.writeAll("O-O-O");
+    } else {
+        const piece = if (move.move.promotion()) |_|
+            chess.Piece.init(.pawn, this.position.side_to_move.opponent())
+        else
+            this.position.at(move.move.dest());
+        const captured = this.position.meta.capturedPiece();
+
+        if (piece.class().? != .pawn)
+            try writer.writeByte(piece.character());
+
+        // TODO: disamiguation
+
+        if (!captured.isEmpty())
+            try writer.writeByte('x');
+        try writer.print("{s}", .{move.move.dest().toString()});
+
+        if (move.move.promotion()) |class| {
+            try writer.writeByte('=');
+            try writer.writeByte(class.character());
+        }
+
+        switch (move.tag) {
+            .ok_check => try writer.writeByte('+'),
+            .ok_mate => try writer.writeAll("\\#"),
+            .ok_stalemate => try writer.writeAll(" (1/2)"),
+            .ok_repitition => try writer.writeAll(" (1/2)"),
+            .ok_insufficient_material => try writer.writeAll(" (1/2)"),
+            else => {},
+        }
+    }
+
+    this.move_slices[this.move_top] = this.move_slice_buffer[start .. start + stream.pos];
 }
 
 fn cmdExit(this: *Frontend, args: *ArgIterator) []const u8 {
@@ -326,7 +430,7 @@ fn cmdPass(this: *Frontend, args: *ArgIterator) []const u8 {
         .move = chess.Move.invalid,
         .prev_meta = this.position.meta,
         .tag = .ok,
-    });
+    }) catch unreachable;
     return this.confirmationStatus();
 }
 
@@ -357,11 +461,20 @@ fn cmdRedo(this: *Frontend, args: *ArgIterator) []const u8 {
     if (this.move_top == this.move_count)
         return "#bred no moves left";
     const move = this.move_history[this.move_top];
-    this.move_top += 1;
     if (move.move.bits.bits == chess.Move.invalid.bits.bits)
         this.position.side_to_move = this.position.side_to_move.opponent()
-    else
-        this.position.doMove(move.move);
+    else if (move.move.source().eql(move.move.dest())) {
+        const class: chess.Class = switch (this.move_slices[this.move_top][0]) {
+            'Q' => .queen,
+            'K' => .king,
+            'R' => .rook,
+            'B' => .bishop,
+            'N' => .knight,
+            else => .pawn,
+        };
+        _ = this.position.spawn(class, move.move.source());
+    } else this.position.doMove(move.move);
+    this.move_top += 1;
     return this.confirmationStatus();
 }
 
@@ -609,13 +722,16 @@ fn spawnPiece(this: *Frontend, expr: []const u8) ?chess.Move.Result.Tag {
     if (coord.getRank() == this.position.side_to_move.opponent().backRank() and class == .pawn)
         return null;
 
+    const meta = this.position.meta;
+    const tag = this.position.spawn(class, coord);
+
     this.addMove(.{
         .move = chess.Move.init(coord, coord, .none),
-        .prev_meta = this.position.meta,
+        .prev_meta = meta,
         .tag = .ok,
-    });
+    }) catch unreachable;
 
-    return this.position.spawn(class, coord);
+    return tag;
 }
 
 const ArgIterator = struct {
@@ -661,7 +777,7 @@ const ArgIterator = struct {
     }
 };
 
-const status_max_width = 50;
+const status_max_width = 30;
 
 const commands = std.ComptimeStringMap(Command, .{
     .{ "/exit", .{
