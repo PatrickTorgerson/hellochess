@@ -27,6 +27,8 @@ const square_width = 10;
 const square_height = 5;
 
 pub fn run(this: *@This(), writer: *zcon.Writer) !void {
+    defer this.frontend.deinit();
+
     writer.useDedicatedScreen();
     defer writer.useDefaultScreen();
 

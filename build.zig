@@ -20,6 +20,9 @@ pub fn build(b: *std.build.Builder) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const zcon_module = zcon.module(b);
+    const network_module = b.addModule("network", .{
+        .source_file = .{ .path = "src/zig-network/network.zig" },
+    });
 
     const exe = b.addExecutable(.{
         .name = "hellochess",
@@ -28,6 +31,7 @@ pub fn build(b: *std.build.Builder) void {
         .optimize = optimize,
     });
     exe.addModule("zcon", zcon_module);
+    exe.addModule("network", network_module);
     exe.install();
 
     const run_cmd = b.addRunArtifact(exe);

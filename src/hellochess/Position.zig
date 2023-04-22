@@ -493,7 +493,7 @@ pub fn inCheck(position: Position, affiliation: Affiliation) bool {
 }
 
 /// looks for checks, mates, and draws
-fn checksAndMates(position: Position) Move.Result.Tag {
+pub fn checksAndMates(position: Position) Move.Result.Tag {
     if (position.inCheck(position.side_to_move)) {
         var buffer: [128]Move = undefined;
         const moves = movegen.generateMoves(&buffer, position, position.side_to_move) catch unreachable;

@@ -9,6 +9,7 @@
 const std = @import("std");
 const chess = @import("../hellochess.zig");
 const zcon = @import("zcon");
+const network = @import("network");
 
 const Frontend = @This();
 
@@ -51,8 +52,6 @@ dev_commands: bool,
 should_exit: bool,
 /// who won the game
 win_state: WinState = .ongoing,
-/// a player offers a draw
-draw_offered: ?chess.Affiliation = null,
 /// color associated with white pieces
 col_white: zcon.Color = zcon.Color.col16(.white),
 /// color associated with blac pieces
@@ -70,8 +69,8 @@ move_top: usize = 0,
 move_count: usize = 0,
 /// do not wrap status line next print only
 no_wrap: bool = false,
-
-// TODO: fields for network connection
+// network connection
+sock: ?network.Socket = null,
 
 /// a new frontend
 pub fn init(dev_commands: bool, play_mode: PlayMode, player_affiliation: chess.Affiliation) Frontend {
@@ -85,18 +84,75 @@ pub fn init(dev_commands: bool, play_mode: PlayMode, player_affiliation: chess.A
     };
 }
 
-/// init a new pass and play frontend
-pub fn passAndPlay(dev_commands: bool) Frontend {
-    return Frontend.init(dev_commands, .pass_and_play, .white);
+/// a new frontend for network p2p multiplayer
+pub fn initNetwork(player_affiliation: chess.Affiliation, sock: network.Socket) Frontend {
+    return .{
+        .status = "#wht Let's play some chess!",
+        .position = chess.Position.init(),
+        .player_affiliation = player_affiliation,
+        .play_mode = .network_multiplayer,
+        .dev_commands = false,
+        .should_exit = false,
+        .sock = sock,
+    };
+}
+
+pub fn deinit(this: *Frontend) void {
+    if (this.play_mode == .network_multiplayer)
+        this.sock.?.close();
 }
 
 /// requests and makes next move
-/// returns true when exit is requested
 pub fn doTurn(this: *Frontend, writer: *zcon.Writer) !void {
     switch (this.play_mode) {
         .pass_and_play => try this.runPassAndPlay(writer),
         .ai_opponent => unreachable, // TODO: implement
-        .network_multiplayer => unreachable, // TODO: implement
+        .network_multiplayer => try this.runNetworkMultiplayer(writer),
+    }
+}
+
+pub fn runNetworkMultiplayer(this: *Frontend, writer: *zcon.Writer) !void {
+    if (this.position.side_to_move == this.player_affiliation) {
+        const move = try this.clientMove(writer);
+        if (move.len == 0)
+            return;
+        if (isCommand(move))
+            return;
+
+        if (this.tryMove(move)) {
+            const move_made = this.move_history[this.move_top - 1].move;
+            _ = try this.sock.?.send(std.mem.toBytes(move_made)[0..]);
+        }
+    } else {
+        writer.clearLine();
+        writer.setForeground(this.affiliatedColor());
+        writer.put(" > waiting for opponent ...");
+        writer.usePreviousColor();
+        writer.flush();
+
+        var data: [@sizeOf(chess.Move)]u8 = undefined;
+        _ = try this.sock.?.receive(data[0..]);
+        const move_made = std.mem.bytesToValue(chess.Move, &data);
+
+        // opponent abandoned game
+        if (move_made.bits.bits == chess.Move.invalid.bits.bits) {
+            this.should_exit = true;
+            writer.clearLine();
+            writer.put("\r#indent;opponent abandoned game, you win by resignation\n\npress enter to exit");
+            writer.flush();
+            this.waitForKey();
+            return;
+        }
+
+        const prev_meta = this.position.meta;
+        this.position.doMove(move_made);
+        const result = this.position.checksAndMates();
+        this.status = this.statusFromMoveResult(result, "");
+        this.addMove(.{
+            .move = move_made,
+            .prev_meta = prev_meta,
+            .tag = result,
+        }) catch unreachable;
     }
 }
 
@@ -109,18 +165,10 @@ pub fn runPassAndPlay(this: *Frontend, writer: *zcon.Writer) !void {
         return;
 
     _ = this.tryMove(move);
-
-    if (this.draw_offered != null and this.draw_offered.? != this.position.side_to_move) {
-        this.status = switch (this.draw_offered.?) {
-            .white => "white offerd a draw, /draw to accept",
-            .black => "black offerd a draw, /draw to accept",
-        };
-    }
 }
 
 /// try to make move, swap turn and return true if successful
 pub fn tryMove(this: *Frontend, move: []const u8) bool {
-    this.move_history[this.move_top].prev_meta = this.position.meta;
     const result = this.position.submitMove(move);
     this.status = this.statusFromMoveResult(result.tag, move);
     const success = Frontend.wasSuccessfulMove(result.tag);
@@ -131,6 +179,15 @@ pub fn tryMove(this: *Frontend, move: []const u8) bool {
 
 /// prompts client player for input, makes moves, and handles commands
 pub fn clientMove(this: *Frontend, writer: *zcon.Writer) ![]const u8 {
+    if (this.win_state != .ongoing) {
+        this.should_exit = true;
+        writer.clearLine();
+        writer.put(" press enter to exit\n");
+        writer.flush();
+        this.waitForKey();
+        return "/";
+    }
+
     writer.clearLine();
     writer.setForeground(this.affiliatedColor());
     writer.fmt(" > {s}: ", .{this.promptText()});
@@ -142,32 +199,14 @@ pub fn clientMove(this: *Frontend, writer: *zcon.Writer) ![]const u8 {
     if (input.len == 0)
         return input;
 
-    if (this.win_state != .ongoing) {
-        var iter = ArgIterator.init(input);
-        if (std.mem.eql(u8, input, "y") or
-            std.mem.eql(u8, input, "Y") or
-            std.mem.eql(u8, input, "yes") or
-            std.mem.eql(u8, input, "Yes"))
-            this.status = cmdReset(this, &iter)
-        else if (std.mem.eql(u8, input, "n") or
-            std.mem.eql(u8, input, "N") or
-            std.mem.eql(u8, input, "no") or
-            std.mem.eql(u8, input, "No"))
-            this.should_exit = true
-        else
-            this.status = "yes or no";
-
-        return "/";
-    }
-
     if (isCommand(input))
         this.status = this.doCommands(input);
 
-    if (this.draw_offered != null and this.draw_offered.? != this.position.side_to_move) {
-        this.draw_offered = null;
-    }
-
     return input;
+}
+
+pub fn waitForKey(this: *Frontend) void {
+    _ = this.readInput() catch {};
 }
 
 pub fn printStatus(this: *Frontend, writer: *zcon.Writer) void {
@@ -390,6 +429,8 @@ fn writeMoveText(this: *Frontend, move: chess.Move.Result) !void {
 fn cmdExit(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
     this.should_exit = true;
+    if (this.play_mode == .network_multiplayer)
+        _ = this.sock.?.send(std.mem.toBytes(chess.Move.invalid)[0..]) catch {};
     return "farwell friend";
 }
 
@@ -407,7 +448,6 @@ fn cmdReset(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
     this.position = chess.Position.init();
     this.win_state = .ongoing;
-    this.draw_offered = null;
     this.move_top = 0;
     this.move_count = 0;
     return this.confirmationStatus();
@@ -417,7 +457,6 @@ fn cmdClear(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
     this.position = chess.Position.initEmpty();
     this.win_state = .ongoing;
-    this.draw_offered = null;
     this.move_top = 0;
     this.move_count = 0;
     return this.confirmationStatus();
@@ -516,34 +555,10 @@ fn cmdFen(this: *Frontend, args: *ArgIterator) []const u8 {
     return this.status_buffer[0..stream.pos];
 }
 
-fn cmdDraw(this: *Frontend, args: *ArgIterator) []const u8 {
-    _ = args;
-    if (this.draw_offered == null) {
-        this.draw_offered = this.position.side_to_move;
-        return "make a move, your opponent can accept your offer on their turn";
-    } else if (this.draw_offered != this.position.side_to_move) {
-        this.win_state = .draw;
-        return "#byel draw by agreement";
-    }
-    return "yeah yeah, just make a move";
-}
-
 fn cmdFlip(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
     this.player_affiliation = this.player_affiliation.opponent();
     return this.confirmationStatus();
-}
-
-fn cmdResign(this: *Frontend, args: *ArgIterator) []const u8 {
-    _ = args;
-    this.win_state = switch (this.position.side_to_move.opponent()) {
-        .white => .white,
-        .black => .black,
-    };
-    return if (this.position.side_to_move == .white)
-        "#grn white resigns! black wins!"
-    else
-        "#grn black resigns! white wins!";
 }
 
 /// return list of commands, overwrite status_buffer
@@ -791,14 +806,6 @@ const commands = std.ComptimeStringMap(Command, .{
     .{ "/reset", .{
         .impl = cmdReset,
         .help = "reset the board for a new game",
-    } },
-    .{ "/resign", .{
-        .impl = cmdResign,
-        .help = "resign the game, resulting in a victory for your opponent",
-    } },
-    .{ "/draw", .{
-        .impl = cmdDraw,
-        .help = "offer a draw to your opponent, they may or may not accept",
     } },
     .{ "/flip", .{
         .impl = cmdFlip,
