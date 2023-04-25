@@ -7,7 +7,7 @@
 const std = @import("std");
 const zcon = @import("src/zcon/build.zig");
 
-pub fn build(b: *std.build.Builder) void {
+pub fn build(b: *std.Build) void {
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
@@ -32,7 +32,7 @@ pub fn build(b: *std.build.Builder) void {
     });
     exe.addModule("zcon", zcon_module);
     exe.addModule("network", network_module);
-    exe.install();
+    b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
@@ -49,7 +49,7 @@ pub fn build(b: *std.build.Builder) void {
         .target = target,
         .optimize = optimize,
     });
-    exe_tests.install();
+    b.installArtifact(exe_tests);
     const test_run_cmd = b.addRunArtifact(exe_tests);
     test_run_cmd.step.dependOn(b.getInstallStep());
     const test_step = b.step("test", "Run unit tests");
