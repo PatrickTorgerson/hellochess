@@ -14,18 +14,26 @@ const FullscreenFrontend = @import("frontend/Fullscreen.zig");
 const Position = @import("hellochess/Position.zig");
 const Affiliation = @import("hellochess/Piece.zig").Affiliation;
 
+/// enumeration of cli commands
 const Command = enum {
     host,
     join,
     play,
 };
 
+/// cli command specified
 var command: Command = .play;
+/// port used for host and join commands
 var port: u16 = 0;
+/// address used for join command
 var addr: std.ArrayList(u8) = undefined;
+/// whether to use the fullscreen frontend
 var use_fullscreen: bool = false;
+/// whether to enable dev commands in play command
 var use_dev_commands: bool = false;
+/// initial chess position for play command
 var position = Position.init();
+/// player affiliation for host command
 var player_affiliation: Affiliation = .white;
 
 pub fn main() !void {
@@ -49,40 +57,17 @@ pub fn main() !void {
 
     switch (command) {
         .host => {
-            var sock = try network.Socket.create(.ipv4, .tcp);
-            defer sock.close();
-
-            try sock.bindToPort(port);
-            try sock.listen();
-
-            writer.fmt("\nwaiting for opponent ...\n", .{});
-            writer.flush();
-
-            var client = try sock.accept();
-
-            std.debug.print("client connected from {}.\n", .{
-                try client.getLocalEndPoint(),
-            });
-            writer.flush();
-
-            // send affiliation to client
-            const opponent = @intCast(u8, @enumToInt(player_affiliation.opponent()));
-            _ = try client.send(&[_]u8{opponent});
-
+            var client = waitForClient(&writer) catch |err| {
+                writer.fmt("failed to connect ({s})\n", .{@errorName(err)});
+                return;
+            };
             try runGame(&writer, Frontend.initNetwork(player_affiliation, client));
         },
         .join => {
-            var sock = try network.connectToHost(allocator, addr.items, port, .tcp);
-
-            const endpoint = try sock.getRemoteEndPoint();
-            writer.fmt("game connected at {}\n", .{endpoint});
-            writer.flush();
-
-            // recieve affiliation from host
-            var affiliation: [1]u8 = undefined;
-            _ = try sock.receive(&affiliation);
-            player_affiliation = @intToEnum(Affiliation, affiliation[0]);
-
+            var sock = connectToHost(&writer, allocator) catch |err| {
+                writer.fmt("failed to connect ({s})\n", .{@errorName(err)});
+                return;
+            };
             try runGame(&writer, Frontend.initNetwork(player_affiliation, sock));
         },
         .play => {
@@ -91,6 +76,7 @@ pub fn main() !void {
     }
 }
 
+/// launch the game with parsed options
 fn runGame(writer: *zcon.Writer, frontend: Frontend) !void {
     if (use_fullscreen) {
         var game = FullscreenFrontend{ .frontend = frontend };
@@ -103,7 +89,55 @@ fn runGame(writer: *zcon.Writer, frontend: Frontend) !void {
     }
 }
 
-pub fn parseCli(writer: *zcon.Writer) !bool {
+/// wait for client connection on port
+/// return resulting socket
+fn waitForClient(writer: *zcon.Writer) !network.Socket {
+    var sock = try network.Socket.create(.ipv4, .tcp);
+    defer sock.close();
+
+    try sock.bindToPort(port);
+    try sock.listen();
+
+    writer.fmt("\nwaiting for opponent ...\n", .{});
+    writer.flush();
+
+    var client = try sock.accept();
+    errdefer client.close();
+
+    std.debug.print("client connected from {}.\n", .{
+        try client.getLocalEndPoint(),
+    });
+
+    // send affiliation to client
+    const opponent = @intCast(u8, @enumToInt(player_affiliation.opponent()));
+    _ = try client.send(&[_]u8{opponent});
+
+    return client;
+}
+
+/// connect to host specified by addr and port
+/// return resulting socket
+fn connectToHost(writer: *zcon.Writer, allocator: std.mem.Allocator) !network.Socket {
+    var sock = try network.connectToHost(allocator, addr.items, port, .tcp);
+    errdefer sock.close();
+
+    const endpoint = try sock.getRemoteEndPoint();
+    writer.fmt("game connected at {}\n", .{endpoint});
+
+    // recieve affiliation from host
+    var affiliation: [1]u8 = undefined;
+    const read = try sock.receive(&affiliation);
+
+    if (read == 0)
+        return error.SocketNotConnected;
+
+    player_affiliation = @intToEnum(Affiliation, affiliation[0]);
+
+    return sock;
+}
+
+/// parse command line, populating globals
+fn parseCli(writer: *zcon.Writer) !bool {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     var allocator = arena.allocator();
@@ -188,12 +222,20 @@ pub fn parseCli(writer: *zcon.Writer) !bool {
 }
 
 /// callback to handle command line options
-pub fn option(cli: *zcon.Cli) !bool {
+fn option(cli: *zcon.Cli) !bool {
+
+    // --fullscreen
     if (cli.isOption("fullscreen")) {
         use_fullscreen = true;
-    } else if (cli.isOption("enable-dev-commands")) {
+    }
+
+    // --enable-dev-commands
+    else if (cli.isOption("enable-dev-commands")) {
         use_dev_commands = true;
-    } else if (cli.isOption("fen")) {
+    }
+
+    // --fen
+    else if (cli.isOption("fen")) {
         const fen = cli.peekString() orelse {
             cli.writer.put("expected fen string\n");
             return false;
@@ -207,7 +249,10 @@ pub fn option(cli: *zcon.Cli) !bool {
             cli.writer.put("invalid fen string\n");
             return false;
         };
-    } else if (cli.isOption("affiliation")) {
+    }
+
+    // --affiliation, -a
+    else if (cli.isOption("affiliation")) {
         const affiliation = cli.peekString() orelse {
             cli.writer.put("expected affiliation, white, black, or random\n");
             return false;
@@ -233,13 +278,13 @@ pub fn option(cli: *zcon.Cli) !bool {
 }
 
 /// callback to handle non option commandline args
-pub fn input(cli: *zcon.Cli) !bool {
+fn input(cli: *zcon.Cli) !bool {
     cli.writer.fmt("unexpected arg `{s}`\n", .{cli.current_arg});
     return false;
 }
 
 /// callback to handle help options
-pub fn help(cli: *zcon.Cli) !bool {
+fn help(cli: *zcon.Cli) !bool {
     cli.writer.put("\n==== Usage ====\n\n");
     cli.writer.indent(1);
     cli.writer.put("hellochess play [options]\n");

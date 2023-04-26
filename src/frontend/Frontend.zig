@@ -111,6 +111,7 @@ pub fn doTurn(this: *Frontend, writer: *zcon.Writer) !void {
     }
 }
 
+/// turn logic for network multiplayer mode
 pub fn runNetworkMultiplayer(this: *Frontend, writer: *zcon.Writer) !void {
     if (this.position.side_to_move == this.player_affiliation) {
         const move = try this.clientMove(writer);
@@ -131,11 +132,11 @@ pub fn runNetworkMultiplayer(this: *Frontend, writer: *zcon.Writer) !void {
         writer.flush();
 
         var data: [@sizeOf(chess.Move)]u8 = undefined;
-        _ = try this.sock.?.receive(data[0..]);
+        const recieved = this.sock.?.receive(data[0..]);
         const move_made = std.mem.bytesToValue(chess.Move, &data);
 
         // opponent abandoned game
-        if (move_made.bits.bits == chess.Move.invalid.bits.bits) {
+        if (move_made.bits.bits == chess.Move.invalid.bits.bits or std.meta.isError(recieved)) {
             this.should_exit = true;
             writer.clearLine();
             writer.put("\r#indent;opponent abandoned game, you win by resignation\n\npress enter to exit");
@@ -156,7 +157,7 @@ pub fn runNetworkMultiplayer(this: *Frontend, writer: *zcon.Writer) !void {
     }
 }
 
-/// turn logic for pass and play mode, returns true if exit is requested
+/// turn logic for pass and play mode
 pub fn runPassAndPlay(this: *Frontend, writer: *zcon.Writer) !void {
     const move = try this.clientMove(writer);
     if (move.len == 0)

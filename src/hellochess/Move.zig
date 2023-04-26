@@ -97,8 +97,6 @@ pub fn format(value: Move, comptime fmt: []const u8, options: std.fmt.FormatOpti
 }
 
 pub const invalid = Move.init(Coordinate.a4, Coordinate.h5, .promote_knight);
-pub const resign = Move.init(Coordinate.a4, Coordinate.h5, .promote_bishop);
-pub const offer_draw = Move.init(Coordinate.a4, Coordinate.h5, .promote_rook);
 
 /// result of attmpting a move
 pub const Result = struct {
