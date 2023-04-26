@@ -71,7 +71,8 @@ pub fn main() !void {
             try runGame(&writer, Frontend.initNetwork(player_affiliation, sock));
         },
         .play => {
-            try runGame(&writer, Frontend.init(use_dev_commands, .pass_and_play, .white));
+            const mode: Frontend.PlayMode = if (use_dev_commands) .development else .pass_and_play;
+            try runGame(&writer, Frontend.init(mode, .white));
         },
     }
 }
@@ -287,15 +288,17 @@ fn input(cli: *zcon.Cli) !bool {
 fn help(cli: *zcon.Cli) !bool {
     cli.writer.put("\n==== Usage ====\n\n");
     cli.writer.indent(1);
+    cli.writer.put("hellochess (help|h)\n");
     cli.writer.put("hellochess play [options]\n");
-    cli.writer.put("hellochess host [options]\n");
-    cli.writer.put("hellochess join [options]\n");
+    cli.writer.put("hellochess host <PORT> [options]\n");
+    cli.writer.put("hellochess join <ADDRESS>:<PORT> [options]\n");
     cli.writer.put("\nnot all options are available for all commands\n");
     cli.writer.unindent(1);
 
     cli.writer.put("\n==== Options ====\n\n");
     cli.writer.indent(1);
     cli.printOptionHelp(all_options);
+    cli.writer.put("--help, --h, -help, -h\n#indent display this help message\n");
     cli.writer.unindent(1);
     cli.writer.putChar('\n');
     return false;

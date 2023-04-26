@@ -13,7 +13,8 @@ const network = @import("network");
 
 const Frontend = @This();
 
-const PlayMode = enum {
+pub const PlayMode = enum {
+    development,
     pass_and_play,
     ai_opponent,
     network_multiplayer,
@@ -27,7 +28,7 @@ const WinState = enum {
 };
 
 const Command = struct {
-    dev: bool = false,
+    scopes: []const PlayMode = &[_]PlayMode{},
     impl: *const fn (*Frontend, *ArgIterator) []const u8,
     help: []const u8,
 };
@@ -46,8 +47,6 @@ position: chess.Position,
 player_affiliation: chess.Affiliation,
 /// I just like havin a doc comment on evry field ok
 play_mode: PlayMode,
-/// whether client has access to dev commands
-dev_commands: bool,
 /// whether the client has requested an exit
 should_exit: bool,
 /// who won the game
@@ -73,13 +72,12 @@ no_wrap: bool = false,
 sock: ?network.Socket = null,
 
 /// a new frontend
-pub fn init(dev_commands: bool, play_mode: PlayMode, player_affiliation: chess.Affiliation) Frontend {
+pub fn init(play_mode: PlayMode, player_affiliation: chess.Affiliation) Frontend {
     return .{
         .status = "#wht Let's play some chess!",
         .position = chess.Position.init(),
         .player_affiliation = player_affiliation,
         .play_mode = play_mode,
-        .dev_commands = dev_commands,
         .should_exit = false,
     };
 }
@@ -91,7 +89,6 @@ pub fn initNetwork(player_affiliation: chess.Affiliation, sock: network.Socket) 
         .position = chess.Position.init(),
         .player_affiliation = player_affiliation,
         .play_mode = .network_multiplayer,
-        .dev_commands = false,
         .should_exit = false,
         .sock = sock,
     };
@@ -105,6 +102,7 @@ pub fn deinit(this: *Frontend) void {
 /// requests and makes next move
 pub fn doTurn(this: *Frontend, writer: *zcon.Writer) !void {
     switch (this.play_mode) {
+        .development => try this.runPassAndPlay(writer),
         .pass_and_play => try this.runPassAndPlay(writer),
         .ai_opponent => unreachable, // TODO: implement
         .network_multiplayer => try this.runNetworkMultiplayer(writer),
@@ -362,7 +360,12 @@ pub fn doCommands(this: *Frontend, input: []const u8) []const u8 {
     const arg1 = arg_iter.next() orelse "";
 
     if (commands.get(arg1)) |cmd| {
-        if (cmd.dev and !this.dev_commands) return "#red you cannot use dev commands";
+
+        // determine if this command is in scope
+        for (cmd.scopes) |scope| {
+            if (scope == this.play_mode) break;
+        } else return "#red command is unavailable in this mode";
+
         return cmd.impl(this, &arg_iter);
     } else return "#red no such command";
 }
@@ -566,8 +569,13 @@ fn cmdFlip(this: *Frontend, args: *ArgIterator) []const u8 {
 fn commandListStatus(this: *Frontend) []const u8 {
     var stream = std.io.fixedBufferStream(&this.status_buffer);
     var writer = stream.writer();
-    for (commands.kvs[0..]) |kv| {
-        if (kv.value.dev and !this.dev_commands) continue;
+    cmds: for (commands.kvs[0..]) |kv| {
+
+        // determine if this command is in scope
+        scopes: for (kv.value.scopes) |scope| {
+            if (scope == this.play_mode) break :scopes;
+        } else continue :cmds;
+
         writer.writeAll(kv.key) catch {};
         writer.writeAll("  ") catch {};
     }
@@ -794,56 +802,63 @@ const ArgIterator = struct {
 };
 
 const status_max_width = 30;
+const all_scopes = &[_]PlayMode{ .pass_and_play, .ai_opponent, .network_multiplayer, .development };
 
 const commands = std.ComptimeStringMap(Command, .{
     .{ "/exit", .{
         .impl = cmdExit,
         .help = "quit the game, no saving",
+        .scopes = all_scopes,
     } },
     .{ "/help", .{
         .impl = cmdHelp,
         .help = "args: [CMD] ; print a list of available commands, or info on a specific command [CMD]",
+        .scopes = all_scopes,
     } },
     .{ "/reset", .{
         .impl = cmdReset,
         .help = "reset the board for a new game",
+        .scopes = &[_]PlayMode{ .pass_and_play, .ai_opponent, .development },
     } },
     .{ "/flip", .{
         .impl = cmdFlip,
         .help = "flip the board perspective",
+        .scopes = &[_]PlayMode{ .pass_and_play, .development },
     } },
     .{ "/load", .{
         .impl = cmdLoad,
         .help = "args: <FEN> ; load a position from the fen string <FEN>",
+        .scopes = &[_]PlayMode{ .pass_and_play, .ai_opponent, .development },
     } },
     .{ "/fen", .{
         .impl = cmdFen,
         .help = "displays the cuurren position as a fen string",
+        .scopes = all_scopes,
     } },
 
     .{ "/clear", .{
         .impl = cmdClear,
         .help = "clear all pieces from the board except kings",
-        .dev = true,
+        .scopes = &[_]PlayMode{.development},
     } },
     .{ "/pass", .{
         .impl = cmdPass,
         .help = "pass the current turn without making a move",
-        .dev = true,
+        .scopes = &[_]PlayMode{.development},
     } },
     .{ "/spawn", .{
         .impl = cmdSpawn,
         .help = "args: <EX> ; spawn a piece for the current affiliation at a given coord, eg. Rh8 or e3",
-        .dev = true,
+        .scopes = &[_]PlayMode{.development},
     } },
     .{ "/undo", .{
         .impl = cmdUndo,
         .help = "undo the last played move",
-        .dev = true,
+        .scopes = &[_]PlayMode{.development},
     } },
     .{ "/redo", .{
         .impl = cmdRedo,
         .help = "redo a previously undone move",
-        .dev = true,
+        .scopes = &[_]PlayMode{.development},
     } },
 });
