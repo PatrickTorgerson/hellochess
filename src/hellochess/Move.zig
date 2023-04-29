@@ -112,6 +112,7 @@ pub const Result = struct {
         ok_stalemate,
         ok_repitition,
         ok_insufficient_material,
+        ok_fifty_move_rule,
         ok_en_passant,
 
         bad_notation,

@@ -494,21 +494,34 @@ pub fn inCheck(position: Position, affiliation: Affiliation) bool {
 
 /// looks for checks, mates, and draws
 pub fn checksAndMates(position: Position) Move.Result.Tag {
-    if (position.inCheck(position.side_to_move)) {
-        var buffer: [128]Move = undefined;
-        const moves = movegen.generateMoves(&buffer, position, position.side_to_move) catch unreachable;
-        for (moves) |move| {
-            // filter illegals
-            var p = position;
-            p.doMove(move);
-            if (p.inCheck(position.side_to_move))
-                continue;
-            // a valid move means were not mated
-            return .ok_check;
-        }
-        return .ok_mate;
-    }
+    const in_check = position.inCheck(position.side_to_move);
+    const available_moves = position.hasLegalMoves(position.side_to_move);
+
+    if (in_check and !available_moves) return .ok_mate;
+    if (position.meta.fiftyCounter() >= 100) return .ok_fifty_move_rule;
+    if (in_check and available_moves) return .ok_check;
+    if (!in_check and !available_moves) return .ok_stalemate;
+
+    // TODO: insufficiant material
+    // TODO: repitition
+
     return .ok;
+}
+
+/// determines if any affiliated pieces have legal moves available
+pub fn hasLegalMoves(position: Position, affiliation: Affiliation) bool {
+    var buffer: [128]Move = undefined;
+    const moves = movegen.generateMoves(&buffer, position, affiliation) catch return true;
+    for (moves) |move| {
+        // filter illegals
+        var p = position;
+        p.doMove(move);
+        if (p.inCheck(affiliation))
+            continue // a move that puts or leaves us in check is illegal
+        else
+            return true;
+    }
+    return false;
 }
 
 /// standard chess starting position

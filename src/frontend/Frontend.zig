@@ -656,9 +656,22 @@ fn statusFromMoveResult(this: *Frontend, move_result: chess.Move.Result.Tag, inp
         .ok_en_passant => "#bgrn En Passant!",
         .ok_check => "#bgrn check!",
         .ok_mate => this.winStatus(),
-        .ok_stalemate => "#wht draw",
-        .ok_repitition => "#wht draw",
-        .ok_insufficient_material => "#wht draw",
+        .ok_stalemate => blk: {
+            this.win_state = .draw;
+            break :blk "#yel draw by stalemate";
+        },
+        .ok_repitition => blk: {
+            this.win_state = .draw;
+            break :blk "#yel draw by repitition";
+        },
+        .ok_insufficient_material => blk: {
+            this.win_state = .draw;
+            break :blk "#yel draw by insufficient material";
+        },
+        .ok_fifty_move_rule => blk: {
+            this.win_state = .draw;
+            break :blk "#yel draw by fifty move rule";
+        },
         .bad_notation => this.badNotationStatus(input),
         .bad_disambiguation => "#bred no such piece on specified rank or file",
         .ambiguous_piece => "#bred ambiguous move",
@@ -706,6 +719,7 @@ fn wasSuccessfulMove(move_result: chess.Move.Result.Tag) bool {
         .ok_stalemate,
         .ok_repitition,
         .ok_insufficient_material,
+        .ok_fifty_move_rule,
         => true,
 
         .bad_castle_in_check,
