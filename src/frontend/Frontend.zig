@@ -168,7 +168,9 @@ pub fn runPassAndPlay(this: *Frontend, writer: *zcon.Writer) !void {
 
 /// try to make move, swap turn and return true if successful
 pub fn tryMove(this: *Frontend, move: []const u8) bool {
-    const result = this.position.submitMove(move);
+    var result = this.position.submitMove(move);
+    if (this.play_mode == .development and result.tag == .ok_insufficient_material)
+        result.tag = if (this.position.inCheck(this.position.side_to_move)) .ok_check else .ok;
     this.status = this.statusFromMoveResult(result.tag, move);
     const success = Frontend.wasSuccessfulMove(result.tag);
     if (success)
@@ -422,6 +424,7 @@ fn writeMoveText(this: *Frontend, move: chess.Move.Result) !void {
             .ok_mate => try writer.writeAll("\\#"),
             .ok_stalemate => try writer.writeAll(" (1/2)"),
             .ok_repitition => try writer.writeAll(" (1/2)"),
+            .ok_fifty_move_rule => try writer.writeAll(" (1/2)"),
             .ok_insufficient_material => try writer.writeAll(" (1/2)"),
             else => {},
         }
@@ -761,7 +764,9 @@ fn spawnPiece(this: *Frontend, expr: []const u8) ?chess.Move.Result.Tag {
         return null;
 
     const meta = this.position.meta;
-    const tag = this.position.spawn(class, coord);
+    var tag = this.position.spawn(class, coord);
+    if (this.play_mode == .development and tag == .ok_insufficient_material)
+        tag = if (this.position.inCheck(this.position.side_to_move)) .ok_check else .ok;
 
     this.addMove(.{
         .move = chess.Move.init(coord, coord, .none),

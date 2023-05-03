@@ -335,7 +335,7 @@ const opt_fullscreen = zcon.Cli.Option{
 const opt_dev = zcon.Cli.Option{
     .alias_long = "enable-dev-commands",
     .alias_short = "",
-    .desc = "enable access to dev commands",
+    .desc = "enable access to dev commands, also disables draws by insufficient materal",
     .help = "not sure this is used atm",
 };
 const opt_fen = zcon.Cli.Option{

@@ -496,16 +496,39 @@ pub fn inCheck(position: Position, affiliation: Affiliation) bool {
 pub fn checksAndMates(position: Position) Move.Result.Tag {
     const in_check = position.inCheck(position.side_to_move);
     const available_moves = position.hasLegalMoves(position.side_to_move);
+    const sufficient_material_black = position.hasSufficientMatingMaterial(.black);
+    const sufficient_material_white = position.hasSufficientMatingMaterial(.white);
 
     if (in_check and !available_moves) return .ok_mate;
     if (position.meta.fiftyCounter() >= 100) return .ok_fifty_move_rule;
-    if (in_check and available_moves) return .ok_check;
     if (!in_check and !available_moves) return .ok_stalemate;
-
-    // TODO: insufficiant material
     // TODO: repitition
+    if (!sufficient_material_black and !sufficient_material_white) return .ok_insufficient_material;
+    if (in_check and available_moves) return .ok_check;
 
     return .ok;
+}
+
+/// determines is the affiliated side has enough material to deliver mate
+pub fn hasSufficientMatingMaterial(position: Position, affiliation: Affiliation) bool {
+    if (position.pawns[affiliation.index()].count() > 0)
+        return true; // pawns can promote
+    if (position.queens[affiliation.index()].count() > 0)
+        return true;
+    if (position.rooks[affiliation.index()].count() > 0)
+        return true;
+
+    const bishops = position.bishops[affiliation.index()].count();
+    const knights = position.knights[affiliation.index()].count();
+
+    if (bishops > 1)
+        return true;
+    if (bishops == 0 and knights > 2)
+        return true; // technically mate is available, but not forcible
+    if (bishops > 0 and knights > 0)
+        return true;
+
+    return false;
 }
 
 /// determines if any affiliated pieces have legal moves available
