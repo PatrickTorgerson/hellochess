@@ -14,6 +14,8 @@
 
 const std = @import("std");
 
+const zobrist = @import("zobrist.zig");
+
 const Position = @import("Position.zig");
 const Piece = @import("Piece.zig");
 const Coordinate = @import("Coordinate.zig");
@@ -46,8 +48,6 @@ pub const Error = error{
 ///  - leading single quotes and double quotes ignored
 ///  - trailing single quotes and double quotes ignored
 pub fn parse(fen: []const u8) Error!Position {
-    @setEvalBranchQuota(1500);
-
     var position: Position = .{
         .squares = undefined,
         .meta = Meta.initEmpty(),
@@ -60,6 +60,7 @@ pub fn parse(fen: []const u8) Error!Position {
         .queens = [_]Bitboard{Bitboard.init()} ** 2,
         .side_to_move = .white,
         .ply = 0,
+        .hash = 0,
     };
 
     var fen_index: usize = 0;
@@ -207,6 +208,7 @@ pub fn parse(fen: []const u8) Error!Position {
     if (position.side_to_move == .black)
         position.ply += 1;
 
+    position.hash = zobrist.hash(position);
     return position;
 }
 

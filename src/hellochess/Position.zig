@@ -8,6 +8,7 @@ const std = @import("std");
 
 const fen = @import("fen.zig");
 const movegen = @import("movegen.zig");
+const zobrist = @import("zobrist.zig");
 
 const Piece = @import("Piece.zig");
 const Notation = @import("Notation.zig");
@@ -49,6 +50,8 @@ queens: [2]Bitboard,
 side_to_move: Affiliation,
 /// number of half moves played so far
 ply: i32,
+/// 64 bit hash for current position
+hash: zobrist.Hash,
 
 /// create an empty position, with only kings
 pub fn initEmpty() Position {
@@ -116,31 +119,41 @@ pub fn writeCapturedPieces(position: Position, writer: anytype, affiliation: Aff
     try writer.writeByteNTimes('Q', 1 -| position.queens[i].count());
 }
 
+/// swaps the side to move, keeping position.hash in sync
+pub fn swapSideToMove(position: *Position) void {
+    position.hash ^= zobrist.sideToMoveHashValue();
+    position.side_to_move = position.side_to_move.opponent();
+}
+
 /// spawn piece at given coord for side to move
 pub fn spawn(position: *Position, class: Class, coord: Coordinate) Move.Result.Tag {
-    const piece = Piece.init(class, position.side_to_move);
+    if (class == .king) return .bad_notation;
 
-    if (!position.squares[coord.index()].isEmpty())
+    const piece = Piece.init(class, position.side_to_move);
+    position.hash ^= zobrist.pieceHashValue(coord, piece);
+
+    if (!position.squares[coord.index()].isEmpty()) {
+        position.hash ^= zobrist.pieceHashValue(coord, position.squares[coord.index()]);
         position.meta.setCapturedPiece(position.squares[coord.index()]);
+    }
 
     position.squares[coord.index()] = piece;
     position.pieces[position.side_to_move.index()].set(coord, true);
     position.pieces[position.side_to_move.opponent().index()].set(coord, false);
 
-    if (class == .king) {
-        position.squares[position.kingCoord().index()] = Piece.empty();
-        position.kings[position.side_to_move.index()] = coord;
-        if (coord.eql(position.side_to_move.kingCoord())) {
-            if (position.squares[position.side_to_move.aRookCoord().index()].is(.rook, position.side_to_move))
-                position.meta.setCastleQueen(position.side_to_move, true);
-            if (position.squares[position.side_to_move.hRookCoord().index()].is(.rook, position.side_to_move))
-                position.meta.setCastleKing(position.side_to_move, true);
-        }
-    } else if (class == .rook and position.kingCoord().eql(position.side_to_move.kingCoord())) {
-        if (coord.eql(position.side_to_move.aRookCoord()))
+    if (class == .rook and position.kingCoord().eql(position.side_to_move.kingCoord())) {
+        if (coord.eql(position.side_to_move.aRookCoord())) {
+            position.hash ^=
+                ~position.meta.castleQueenBit(position.side_to_move) *
+                zobrist.queenCastleHashValue(position.side_to_move);
             position.meta.setCastleQueen(position.side_to_move, true);
-        if (coord.eql(position.side_to_move.hRookCoord()))
+        }
+        if (coord.eql(position.side_to_move.hRookCoord())) {
+            position.hash ^=
+                ~position.meta.castleKingBit(position.side_to_move) *
+                zobrist.kingCastleHashValue(position.side_to_move);
             position.meta.setCastleKing(position.side_to_move, true);
+        }
     }
 
     // update class bitboard
@@ -168,8 +181,53 @@ pub fn spawn(position: *Position, class: Class, coord: Coordinate) Move.Result.T
         .king => {},
     }
 
+    position.hash ^= zobrist.sideToMoveHashValue();
     position.side_to_move = position.side_to_move.opponent();
+
     return position.checksAndMates();
+}
+
+///
+pub fn undoSpawn(position: *Position, coord: Coordinate, prev_meta: Meta) void {
+    position.swapSideToMove();
+    const piece = position.at(coord);
+    if (!piece.isEmpty()) {
+        const affiliation = piece.affiliation().?.index();
+        position.squares[coord.index()] = Piece.empty();
+        position.pieces[affiliation].set(coord, false);
+        switch (piece.class().?) {
+            .pawn => position.pawns[affiliation].set(coord, false),
+            .knight => position.knights[affiliation].set(coord, false),
+            .bishop => position.bishops[affiliation].set(coord, false),
+            .rook => position.rooks[affiliation].set(coord, false),
+            .queen => position.queens[affiliation].set(coord, false),
+            .king => {},
+        }
+        position.hash ^= zobrist.pieceHashValue(coord, piece);
+
+        position.hash ^=
+            (position.meta.castleKingBit(.white) ^ prev_meta.castleKingBit(.white)) *
+            zobrist.kingCastleHashValue(.white);
+        position.hash ^=
+            (position.meta.castleKingBit(.black) ^ prev_meta.castleKingBit(.black)) *
+            zobrist.kingCastleHashValue(.black);
+        position.hash ^=
+            (position.meta.castleQueenBit(.white) ^ prev_meta.castleQueenBit(.white)) *
+            zobrist.queenCastleHashValue(.white);
+        position.hash ^=
+            (position.meta.castleQueenBit(.black) ^ prev_meta.castleQueenBit(.black)) *
+            zobrist.queenCastleHashValue(.black);
+
+        if (position.meta.enpassantFile() != prev_meta.enpassantFile()) {
+            if (position.meta.enpassantFile()) |file|
+                position.hash ^= zobrist.enpassantFileHashValue(file);
+            if (prev_meta.enpassantFile()) |file|
+                position.hash ^= zobrist.enpassantFileHashValue(file);
+        }
+
+        position.meta = prev_meta;
+        position.ply -= 1;
+    }
 }
 
 /// makes a move, no validation, no searching for checks or mates
@@ -178,6 +236,13 @@ pub fn doMove(position: *Position, move: Move) void {
     var captured = position.at(move.dest());
     if (piece.isEmpty()) return;
 
+    position.hash ^= zobrist.pieceHashValue(move.source(), piece);
+    if (!captured.isEmpty())
+        position.hash ^= zobrist.pieceHashValue(move.dest(), captured);
+
+    if (position.meta.enpassantFile()) |file| {
+        position.hash ^= zobrist.enpassantFileHashValue(file);
+    }
     position.meta.setEnpassantFile(null);
 
     if (move.promotion()) |promotion_class| {
@@ -188,6 +253,7 @@ pub fn doMove(position: *Position, move: Move) void {
         .enpassant_capture => {
             const coord = move.dest().offsettedDir(position.side_to_move.reverseDirection(), 1).?;
             captured = position.at(coord);
+            position.hash ^= zobrist.pieceHashValue(coord, captured);
             position.squares[coord.index()] = Piece.empty();
         },
         .castle => {
@@ -200,16 +266,20 @@ pub fn doMove(position: *Position, move: Move) void {
                 move.dest().offsettedDir(.west, 1).?
             else
                 move.dest().offsettedDir(.east, 1).?;
+            const rook = Piece.init(.rook, position.side_to_move);
             position.squares[rook_source.index()] = Piece.empty();
-            position.squares[rook_dest.index()] = Piece.init(.rook, position.side_to_move);
+            position.squares[rook_dest.index()] = rook;
             position.pieces[position.side_to_move.index()].set(rook_source, false);
             position.pieces[position.side_to_move.index()].set(rook_dest, true);
             position.rooks[position.side_to_move.index()].set(rook_source, false);
             position.rooks[position.side_to_move.index()].set(rook_dest, true);
+            position.hash ^= zobrist.pieceHashValue(rook_source, rook);
+            position.hash ^= zobrist.pieceHashValue(rook_dest, rook);
         },
         .pawn_double_push => {
             const file = move.source().getFile();
             position.meta.setEnpassantFile(file);
+            position.hash ^= zobrist.enpassantFileHashValue(file);
         },
         else => unreachable,
     }
@@ -238,24 +308,35 @@ pub fn doMove(position: *Position, move: Move) void {
         },
         .king => {
             position.kings[position.side_to_move.index()] = move.dest();
+            position.hash ^=
+                position.meta.castleKingBit(position.side_to_move) *
+                zobrist.kingCastleHashValue(position.side_to_move);
+            position.hash ^=
+                position.meta.castleQueenBit(position.side_to_move) *
+                zobrist.queenCastleHashValue(position.side_to_move);
             position.meta.setCastleKing(position.side_to_move, false);
             position.meta.setCastleQueen(position.side_to_move, false);
         },
     }
 
     if (!captured.isEmpty()) {
+        const coord = if (move.flag() == .enpassant_capture)
+            move.dest().offsettedDir(position.side_to_move.reverseDirection(), 1).?
+        else
+            move.dest();
         const i = position.side_to_move.opponent().index();
-        position.pieces[i].set(move.dest(), false);
+        position.pieces[i].set(coord, false);
         switch (captured.class().?) {
-            .queen => position.queens[i].set(move.dest(), false),
-            .rook => position.rooks[i].set(move.dest(), false),
-            .bishop => position.bishops[i].set(move.dest(), false),
-            .knight => position.knights[i].set(move.dest(), false),
-            .pawn => position.pawns[i].set(move.dest(), false),
+            .queen => position.queens[i].set(coord, false),
+            .rook => position.rooks[i].set(coord, false),
+            .bishop => position.bishops[i].set(coord, false),
+            .knight => position.knights[i].set(coord, false),
+            .pawn => position.pawns[i].set(coord, false),
             .king => {},
         }
     }
 
+    position.hash ^= zobrist.pieceHashValue(move.dest(), piece);
     position.pieces[position.side_to_move.index()].set(move.source(), false);
     position.pieces[position.side_to_move.index()].set(move.dest(), true);
     position.squares[move.source().index()] = Piece.empty();
@@ -268,19 +349,37 @@ pub fn doMove(position: *Position, move: Move) void {
         position.meta.setFiftyCounter(0);
 
     // update castling rights
-    if (move.dest().eql(Coordinate.h1) or move.source().eql(Coordinate.h1))
+    if (move.dest().eql(Coordinate.h1) or move.source().eql(Coordinate.h1)) {
+        position.hash ^=
+            position.meta.castleKingBit(.white) *
+            zobrist.kingCastleHashValue(.white);
         position.meta.setCastleKing(.white, false);
-    if (move.dest().eql(Coordinate.a1) or move.source().eql(Coordinate.a1))
+    }
+    if (move.dest().eql(Coordinate.a1) or move.source().eql(Coordinate.a1)) {
+        position.hash ^=
+            position.meta.castleQueenBit(.white) *
+            zobrist.queenCastleHashValue(.white);
         position.meta.setCastleQueen(.white, false);
-    if (move.dest().eql(Coordinate.h8) or move.source().eql(Coordinate.h8))
+    }
+    if (move.dest().eql(Coordinate.h8) or move.source().eql(Coordinate.h8)) {
+        position.hash ^=
+            position.meta.castleKingBit(.black) *
+            zobrist.kingCastleHashValue(.black);
         position.meta.setCastleKing(.black, false);
-    if (move.dest().eql(Coordinate.a8) or move.source().eql(Coordinate.a8))
+    }
+    if (move.dest().eql(Coordinate.a8) or move.source().eql(Coordinate.a8)) {
+        position.hash ^=
+            position.meta.castleQueenBit(.black) *
+            zobrist.queenCastleHashValue(.black);
         position.meta.setCastleQueen(.black, false);
+    }
 
+    position.hash ^= zobrist.sideToMoveHashValue();
     position.side_to_move = position.side_to_move.opponent();
 }
 
 pub fn undoMove(position: *Position, move: Move, prev_meta: Meta) void {
+    position.hash ^= zobrist.sideToMoveHashValue();
     position.side_to_move = position.side_to_move.opponent();
 
     const piece = if (move.promotion()) |class| blk: {
@@ -293,6 +392,8 @@ pub fn undoMove(position: *Position, move: Move, prev_meta: Meta) void {
         }
         break :blk Piece.init(.pawn, position.side_to_move);
     } else position.at(move.dest());
+
+    position.hash ^= zobrist.pieceHashValue(move.dest(), position.at(move.dest()));
 
     // update class bitboards
     switch (piece.class().?) {
@@ -337,10 +438,12 @@ pub fn undoMove(position: *Position, move: Move, prev_meta: Meta) void {
     position.pieces[position.side_to_move.index()].set(move.source(), true);
     position.pieces[position.side_to_move.index()].set(move.dest(), false);
     position.squares[move.source().index()] = piece;
+    position.hash ^= zobrist.pieceHashValue(move.source(), piece);
 
     switch (move.flag()) {
         .enpassant_capture => {
             const coord = move.dest().offsettedDir(position.side_to_move.reverseDirection(), 1).?;
+            position.hash ^= zobrist.pieceHashValue(coord, position.meta.capturedPiece());
             position.squares[coord.index()] = position.meta.capturedPiece();
             position.squares[move.dest().index()] = Piece.empty();
         },
@@ -354,15 +457,42 @@ pub fn undoMove(position: *Position, move: Move, prev_meta: Meta) void {
                 move.dest().offsettedDir(.west, 1).?
             else
                 move.dest().offsettedDir(.east, 1).?;
-            position.squares[rook_source.index()] = Piece.init(.rook, position.side_to_move);
+            const rook = Piece.init(.rook, position.side_to_move);
+            position.squares[rook_source.index()] = rook;
             position.squares[rook_dest.index()] = Piece.empty();
             position.squares[move.dest().index()] = position.meta.capturedPiece();
             position.pieces[position.side_to_move.index()].set(rook_source, true);
             position.pieces[position.side_to_move.index()].set(rook_dest, false);
             position.rooks[position.side_to_move.index()].set(rook_source, true);
             position.rooks[position.side_to_move.index()].set(rook_dest, false);
+            position.hash ^= zobrist.pieceHashValue(rook_source, rook);
+            position.hash ^= zobrist.pieceHashValue(rook_dest, rook);
         },
-        else => position.squares[move.dest().index()] = position.meta.capturedPiece(),
+        else => {
+            position.squares[move.dest().index()] = position.meta.capturedPiece();
+            if (!position.meta.capturedPiece().isEmpty())
+                position.hash ^= zobrist.pieceHashValue(move.dest(), position.meta.capturedPiece());
+        },
+    }
+
+    position.hash ^=
+        (position.meta.castleKingBit(.white) ^ prev_meta.castleKingBit(.white)) *
+        zobrist.kingCastleHashValue(.white);
+    position.hash ^=
+        (position.meta.castleKingBit(.black) ^ prev_meta.castleKingBit(.black)) *
+        zobrist.kingCastleHashValue(.black);
+    position.hash ^=
+        (position.meta.castleQueenBit(.white) ^ prev_meta.castleQueenBit(.white)) *
+        zobrist.queenCastleHashValue(.white);
+    position.hash ^=
+        (position.meta.castleQueenBit(.black) ^ prev_meta.castleQueenBit(.black)) *
+        zobrist.queenCastleHashValue(.black);
+
+    if (position.meta.enpassantFile() != prev_meta.enpassantFile()) {
+        if (position.meta.enpassantFile()) |file|
+            position.hash ^= zobrist.enpassantFileHashValue(file);
+        if (prev_meta.enpassantFile()) |file|
+            position.hash ^= zobrist.enpassantFileHashValue(file);
     }
 
     position.ply -= 1;
@@ -509,7 +639,7 @@ pub fn checksAndMates(position: Position) Move.Result.Tag {
     return .ok;
 }
 
-/// determines is the affiliated side has enough material to deliver mate
+/// determines if the affiliated side has enough material to deliver mate
 pub fn hasSufficientMatingMaterial(position: Position, affiliation: Affiliation) bool {
     if (position.pawns[affiliation.index()].count() > 0)
         return true; // pawns can promote
@@ -548,6 +678,12 @@ pub fn hasLegalMoves(position: Position, affiliation: Affiliation) bool {
 }
 
 /// standard chess starting position
-const starting_position = fen.parse(fen.starting_position) catch unreachable;
+const starting_position = blk: {
+    @setEvalBranchQuota(2000);
+    break :blk fen.parse(fen.starting_position) catch unreachable;
+};
 /// position for empty boards, kings must always exist
-const empty_position = fen.parse("4k3/8/8/8/8/8/8/4K3 w - - 0 1") catch unreachable;
+const empty_position = blk: {
+    @setEvalBranchQuota(2000);
+    break :blk fen.parse("4k3/8/8/8/8/8/8/4K3 w - - 0 1") catch unreachable;
+};

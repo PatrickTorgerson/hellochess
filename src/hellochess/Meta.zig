@@ -44,7 +44,7 @@ const InitialValues = struct {
 /// bits 0-3: white and black kingside/queenside castling rights
 /// bits 4-7: file of ep square (starting at 1, so 0 = no ep square)
 /// bits 8-13: piece captured last move (for undoing captures)
-/// bits 14-31: fifty mover counter
+/// bits 14-31: fifty move counter
 bits: Bitfield(u32),
 
 // bit offsets
@@ -83,6 +83,20 @@ pub fn castleQueen(meta: Meta, affiliation: Affiliation) bool {
     return switch (affiliation) {
         .white => meta.bits.get(u1, offset_whitequeen) == 1,
         .black => meta.bits.get(u1, offset_blackqueen) == 1,
+    };
+}
+
+pub fn castleKingBit(meta: Meta, affiliation: Affiliation) u1 {
+    return switch (affiliation) {
+        .white => meta.bits.get(u1, offset_whiteking),
+        .black => meta.bits.get(u1, offset_blackking),
+    };
+}
+
+pub fn castleQueenBit(meta: Meta, affiliation: Affiliation) u1 {
+    return switch (affiliation) {
+        .white => meta.bits.get(u1, offset_whitequeen),
+        .black => meta.bits.get(u1, offset_blackqueen),
     };
 }
 
