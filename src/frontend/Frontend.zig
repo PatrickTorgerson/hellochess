@@ -107,6 +107,9 @@ pub fn doTurn(this: *Frontend, writer: *zcon.Writer) !void {
         .ai_opponent => unreachable, // TODO: implement
         .network_multiplayer => try this.runNetworkMultiplayer(writer),
     }
+
+    if (@import("../hellochess/zobrist.zig").hash(this.position) != this.position.hash)
+        @panic("position hash out of sync");
 }
 
 /// turn logic for network multiplayer mode
@@ -169,6 +172,7 @@ pub fn runPassAndPlay(this: *Frontend, writer: *zcon.Writer) !void {
 /// try to make move, swap turn and return true if successful
 pub fn tryMove(this: *Frontend, move: []const u8) bool {
     var result = this.position.submitMove(move);
+
     if (this.play_mode == .development and result.tag == .ok_insufficient_material)
         result.tag = if (this.position.inCheck(this.position.side_to_move)) .ok_check else .ok;
     this.status = this.statusFromMoveResult(result.tag, move);
@@ -408,7 +412,7 @@ fn writeMoveText(this: *Frontend, move: chess.Move.Result) !void {
         if (piece.class().? != .pawn)
             try writer.writeByte(piece.character());
 
-        // TODO: disamiguation
+        // TODO: disamiguation, issue #4
 
         if (!captured.isEmpty())
             try writer.writeByte('x');
@@ -471,7 +475,7 @@ fn cmdClear(this: *Frontend, args: *ArgIterator) []const u8 {
 
 fn cmdPass(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
-    this.position.side_to_move = this.position.side_to_move.opponent();
+    this.position.swapSideToMove();
     this.addMove(.{
         .move = chess.Move.invalid,
         .prev_meta = this.position.meta,
@@ -496,9 +500,10 @@ fn cmdUndo(this: *Frontend, args: *ArgIterator) []const u8 {
     this.move_top -= 1;
     const prev_move = this.move_history[this.move_top];
     if (prev_move.move.bits.bits == chess.Move.invalid.bits.bits)
-        this.position.side_to_move = this.position.side_to_move.opponent()
-    else
-        this.position.undoMove(prev_move.move, prev_move.prev_meta);
+        this.position.swapSideToMove()
+    else if (prev_move.move.source().eql(prev_move.move.dest())) {
+        this.position.undoSpawn(prev_move.move.dest(), prev_move.prev_meta);
+    } else this.position.undoMove(prev_move.move, prev_move.prev_meta);
     return this.confirmationStatus();
 }
 
@@ -508,7 +513,7 @@ fn cmdRedo(this: *Frontend, args: *ArgIterator) []const u8 {
         return "#bred no moves left";
     const move = this.move_history[this.move_top];
     if (move.move.bits.bits == chess.Move.invalid.bits.bits)
-        this.position.side_to_move = this.position.side_to_move.opponent()
+        this.position.swapSideToMove()
     else if (move.move.source().eql(move.move.dest())) {
         const class: chess.Class = switch (this.move_slices[this.move_top][0]) {
             'Q' => .queen,

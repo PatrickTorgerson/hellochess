@@ -117,18 +117,23 @@ pub const Affiliation = enum(u1) {
 
 ///  Type of piece independent of affiliation
 pub const Class = enum(u4) {
-    pawn = 1,
-    knight = 3,
-    bishop = 4, // bishop value is also 3 but enum vals must be unique
-    rook = 5,
-    queen = 9,
-    king = 0,
+    pawn = 0,
+    knight,
+    bishop,
+    rook,
+    queen,
+    king,
 
     /// return material value of class
     pub fn value(class_: Class) i32 {
-        const enum_val = @intCast(i32, @enumToInt(class_));
-        // 4 = bishop
-        return if (enum_val == 4) 3 else enum_val;
+        return switch (class_) {
+            .pawn => 1,
+            .knight => 3,
+            .bishop => 3,
+            .rook => 5,
+            .queen => 9,
+            .king => 0,
+        };
     }
 
     /// return character used to denote class in move notation
