@@ -337,6 +337,13 @@ pub fn affiliatedColor(this: Frontend) zcon.Color {
     };
 }
 
+/// return the previously made move
+pub fn getLastMove(this: Frontend) ?chess.Move {
+    if (this.move_top == 0)
+        return null;
+    return this.move_history[this.move_top - 1].move;
+}
+
 /// return an iterator that iterates over files
 /// in order to be rendered from left to right
 pub fn fileIterator(this: Frontend) chess.util.EnumIterator(chess.File) {

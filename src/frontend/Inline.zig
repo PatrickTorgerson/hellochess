@@ -22,6 +22,10 @@ const col_white = zcon.Color.col16(.bright_yellow);
 const col_black = zcon.Color.col16(.bright_cyan);
 const col_light_sq = zcon.Color.col16(.yellow);
 const col_dark_sq = zcon.Color.col16(.cyan);
+const col_move_dest_white = zcon.Color.col16(.red);
+const col_move_dest_black = zcon.Color.col16(.magenta);
+const col_move_source_light = zcon.Color.col16(.red);
+const col_move_source_dark = zcon.Color.col16(.magenta);
 
 frontend: Frontend,
 
@@ -87,11 +91,11 @@ fn renderBoard(this: @This(), writer: *zcon.Writer) !void {
             const coord = chess.Coordinate.from2d(file, rank);
             const piece = this.frontend.position.at(coord);
             if (!piece.isEmpty()) {
-                setAffiliatedColor(writer, piece.affiliation().?);
+                this.setAffiliatedColor(writer, piece.affiliation().?, coord);
                 writer.fmt("#b{u}#b:off; ", .{piece.character()});
                 writer.usePreviousColor();
             } else {
-                setSquareColor(writer, file, rank);
+                this.setSquareColor(writer, file, rank);
                 writer.put("#d:*; ");
                 writer.useDefaultColors();
             }
@@ -121,7 +125,7 @@ fn drawFileLine(this: @This(), writer: *zcon.Writer) void {
 /// for `affiliation`
 fn drawCaptured(this: @This(), writer: *zcon.Writer, affiliation: chess.Affiliation, material_advantage: i32) void {
     writer.clearLine();
-    setAffiliatedColor(writer, affiliation.opponent());
+    this.setAffiliatedColor(writer, affiliation.opponent(), null);
     this.frontend.position.writeCapturedPieces(writer, affiliation.opponent()) catch {};
     if (material_advantage >= 0)
         writer.fmt("#dgry; +{}#prv", .{material_advantage});
@@ -129,15 +133,36 @@ fn drawCaptured(this: @This(), writer: *zcon.Writer, affiliation: chess.Affiliat
     writer.usePreviousColor();
 }
 
-fn setAffiliatedColor(writer: *zcon.Writer, affiliation: chess.Affiliation) void {
+fn setAffiliatedColor(this: @This(), writer: *zcon.Writer, affiliation: chess.Affiliation, coord: ?chess.Coordinate) void {
+    if (this.frontend.getLastMove()) |move| {
+        if (coord != null and move.dest().eql(coord.?)) {
+            writer.setForeground(switch (affiliation) {
+                .white => col_move_dest_white,
+                .black => col_move_dest_black,
+            });
+            return;
+        }
+    }
     writer.setForeground(switch (affiliation) {
         .white => col_white,
         .black => col_black,
     });
 }
 
-fn setSquareColor(writer: *zcon.Writer, file: chess.Coordinate.File, rank: chess.Coordinate.Rank) void {
-    if (@rem(file.val() + rank.val(), 2) != 0)
+fn setSquareColor(this: @This(), writer: *zcon.Writer, file: chess.Coordinate.File, rank: chess.Coordinate.Rank) void {
+    const is_light = @rem(file.val() + rank.val(), 2) != 0;
+    const coord = chess.Coordinate.from2d(file, rank);
+
+    if (this.frontend.getLastMove()) |move| {
+        if (move.source().eql(coord)) {
+            if (is_light)
+                writer.setForeground(col_move_source_light)
+            else
+                writer.setForeground(col_move_source_dark);
+            return;
+        }
+    }
+    if (is_light)
         writer.setForeground(col_light_sq)
     else
         writer.setForeground(col_dark_sq);
