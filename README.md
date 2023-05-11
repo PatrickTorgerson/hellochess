@@ -11,7 +11,7 @@ there's also a work in progress fullscreen mode with cli option `--fullscreen`
 ## Building
 
 Building requires [git](https://git-scm.com) and the latest master build of [zig](https://ziglang.org/download/).
-Consider using a zig version manager like [zigup](https://github.com/marler8997/zigup/releases) for
+Consider using a zig version manager like [zigup](https://github.com/marler8997/zigup) for
 easier updating and/or version swapping.
 
  1. clone with `git clone --recursive https://github.com/PatrickTorgerson/hellochess.git`
