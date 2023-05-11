@@ -135,7 +135,7 @@ fn drawCaptured(this: @This(), writer: *zcon.Writer, affiliation: chess.Affiliat
 
 fn setAffiliatedColor(this: @This(), writer: *zcon.Writer, affiliation: chess.Affiliation, coord: ?chess.Coordinate) void {
     if (this.frontend.getLastMove()) |move| {
-        if (coord != null and move.dest().eql(coord.?)) {
+        if (move.bits.bits != chess.Move.invalid.bits.bits and coord != null and move.dest().eql(coord.?)) {
             writer.setForeground(switch (affiliation) {
                 .white => col_move_dest_white,
                 .black => col_move_dest_black,
@@ -154,7 +154,7 @@ fn setSquareColor(this: @This(), writer: *zcon.Writer, file: chess.Coordinate.Fi
     const coord = chess.Coordinate.from2d(file, rank);
 
     if (this.frontend.getLastMove()) |move| {
-        if (move.source().eql(coord)) {
+        if (move.bits.bits != chess.Move.invalid.bits.bits and move.source().eql(coord)) {
             if (is_light)
                 writer.setForeground(col_move_source_light)
             else
