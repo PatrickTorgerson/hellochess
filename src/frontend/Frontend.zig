@@ -172,7 +172,6 @@ pub fn runPassAndPlay(this: *Frontend, writer: *zcon.Writer) !void {
 /// try to make move, swap turn and return true if successful
 pub fn tryMove(this: *Frontend, move: []const u8) bool {
     var result = this.position.submitMove(move);
-
     if (this.play_mode == .development and result.tag == .ok_insufficient_material)
         result.tag = if (this.position.inCheck(this.position.side_to_move)) .ok_check else .ok;
     this.status = this.statusFromMoveResult(result.tag, move);
@@ -714,12 +713,11 @@ fn badNotationStatus(this: *Frontend, input: []const u8) []const u8 {
 }
 
 fn winStatus(this: *Frontend) []const u8 {
-    this.position.side_to_move = this.position.side_to_move.opponent();
-    this.win_state = switch (this.position.side_to_move) {
+    this.win_state = switch (this.position.side_to_move.opponent()) {
         .white => .white,
         .black => .black,
     };
-    return if (this.position.side_to_move == .white)
+    return if (this.position.side_to_move.opponent() == .white)
         "#grn checkmate! white wins!"
     else
         "#grn checkmate! black wins!";
