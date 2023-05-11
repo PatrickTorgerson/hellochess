@@ -53,9 +53,8 @@ pub fn run(this: *@This(), writer: *zcon.Writer) !void {
         if (this.frontend.should_exit)
             break;
         writer.restoreCursor();
-        writer.setCursorX(28);
         writer.cursorDown(2);
-        this.frontend.printHistory(writer, 12);
+        this.frontend.printHistory(writer, 28, 12);
         writer.flush();
     }
     writer.put("\n");

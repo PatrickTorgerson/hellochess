@@ -247,7 +247,7 @@ pub fn printStatus(this: *Frontend, writer: *zcon.Writer) void {
     writer.useDefaultColors();
 }
 
-pub fn printHistory(this: *Frontend, writer: *zcon.Writer, lines: i32) void {
+pub fn printHistory(this: *Frontend, writer: *zcon.Writer, column: i16, lines: i32) void {
     var start = std.math.min(
         this.move_top -| 1,
         this.move_count -| @intCast(usize, lines * 2) + 1,
@@ -256,9 +256,11 @@ pub fn printHistory(this: *Frontend, writer: *zcon.Writer, lines: i32) void {
         start -= 1;
     var i = start;
 
+    writer.setCursorX(column);
+
     while (i - start < lines * 2) : (i += 2) {
-        writer.put("                          ");
-        writer.cursorLeft(26);
+        writer.put("                              ");
+        writer.cursorLeft(30);
 
         if (i >= this.move_count) {
             writer.cursorDown(1);
@@ -266,21 +268,20 @@ pub fn printHistory(this: *Frontend, writer: *zcon.Writer, lines: i32) void {
         }
 
         const turn = (i / 2) + 1;
-        writer.fmt("#dgry;{: >2}.#prv; ", .{turn});
+        writer.fmt("#dgry;{: >3}.#prv; ", .{turn});
 
         if (this.move_top > 0 and i == this.move_top - 1)
             writer.setForeground(zcon.Color.col16(.green));
 
-        writer.fmt("{s}", .{this.move_slices[i]});
+        writer.fmt("{s: <5}", .{this.move_slices[i]});
         writer.useDefaultColors();
-        const white_len = @intCast(i16, this.move_slices[i].len + 4);
         if (i + 1 >= this.move_count) {
+            writer.setCursorX(column);
             writer.cursorDown(1);
-            writer.cursorLeft(white_len);
             continue;
         }
 
-        writer.put(" #dgry;..#prv; ");
+        writer.put(" #dgry;...#prv;  ");
         if (this.move_top > 0 and i + 1 == this.move_top - 1)
             writer.setForeground(zcon.Color.col16(.green));
 
@@ -288,7 +289,7 @@ pub fn printHistory(this: *Frontend, writer: *zcon.Writer, lines: i32) void {
         writer.useDefaultColors();
 
         writer.cursorDown(1);
-        writer.cursorLeft(white_len + @intCast(i16, this.move_slices[i + 1].len + 4));
+        writer.setCursorX(column);
     }
 }
 
