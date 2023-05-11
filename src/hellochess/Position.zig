@@ -9,6 +9,7 @@ const std = @import("std");
 const fen = @import("fen.zig");
 const movegen = @import("movegen.zig");
 const zobrist = @import("zobrist.zig");
+const history = @import("history.zig");
 
 const Piece = @import("Piece.zig");
 const Notation = @import("Notation.zig");
@@ -17,6 +18,7 @@ const Move = @import("Move.zig");
 const Meta = @import("Meta.zig");
 const Bitboard = @import("Bitboard.zig");
 
+const History = history.History;
 const MoveIterator = movegen.MoveIterator;
 const Class = Piece.Class;
 const Affiliation = Piece.Affiliation;
@@ -52,6 +54,7 @@ side_to_move: Affiliation,
 ply: i32,
 /// 64 bit hash for current position
 hash: zobrist.Hash,
+hash_history: History(zobrist.Hash, 32) = .{},
 
 /// create an empty position, with only kings
 pub fn initEmpty() Position {
@@ -129,6 +132,8 @@ pub fn swapSideToMove(position: *Position) void {
 pub fn spawn(position: *Position, class: Class, coord: Coordinate) Move.Result.Tag {
     if (class == .king) return .bad_notation;
 
+    position.hash_history.push(position.hash);
+
     const piece = Piece.init(class, position.side_to_move);
     position.hash ^= zobrist.pieceHashValue(coord, piece);
 
@@ -188,7 +193,7 @@ pub fn spawn(position: *Position, class: Class, coord: Coordinate) Move.Result.T
 }
 
 ///
-pub fn undoSpawn(position: *Position, coord: Coordinate, prev_meta: Meta) void {
+pub fn undoSpawn(position: *Position, coord: Coordinate, prev_meta: Meta, hash_restore: ?zobrist.Hash) void {
     position.swapSideToMove();
     const piece = position.at(coord);
     if (!piece.isEmpty()) {
@@ -227,6 +232,11 @@ pub fn undoSpawn(position: *Position, coord: Coordinate, prev_meta: Meta) void {
 
         position.meta = prev_meta;
         position.ply -= 1;
+
+        if (hash_restore) |hash|
+            _ = position.hash_history.popRestore(hash)
+        else
+            _ = position.hash_history.pop();
     }
 }
 
@@ -235,6 +245,8 @@ pub fn doMove(position: *Position, move: Move) void {
     var piece = position.at(move.source());
     var captured = position.at(move.dest());
     if (piece.isEmpty()) return;
+
+    position.hash_history.push(position.hash);
 
     position.hash ^= zobrist.pieceHashValue(move.source(), piece);
     if (!captured.isEmpty())
@@ -378,7 +390,12 @@ pub fn doMove(position: *Position, move: Move) void {
     position.side_to_move = position.side_to_move.opponent();
 }
 
-pub fn undoMove(position: *Position, move: Move, prev_meta: Meta) void {
+/// undo the last move made.
+/// assumes `move` to be the last move made
+/// assumes `prev_meta` to be the meta state of the position before `move` was made
+/// if these assumptions are not met this could result in a corrupted position
+/// `hash_restore` can be used to restore a previously overriden hash in `position.hash_history`
+pub fn undoMove(position: *Position, move: Move, prev_meta: Meta, hash_restore: ?zobrist.Hash) void {
     position.hash ^= zobrist.sideToMoveHashValue();
     position.side_to_move = position.side_to_move.opponent();
 
@@ -497,6 +514,11 @@ pub fn undoMove(position: *Position, move: Move, prev_meta: Meta) void {
 
     position.ply -= 1;
     position.meta = prev_meta;
+
+    if (hash_restore) |hash|
+        _ = position.hash_history.popRestore(hash)
+    else
+        _ = position.hash_history.pop();
 }
 
 /// submit move, move to be made pending validation
@@ -626,17 +648,35 @@ pub fn inCheck(position: Position, affiliation: Affiliation) bool {
 pub fn checksAndMates(position: Position) Move.Result.Tag {
     const in_check = position.inCheck(position.side_to_move);
     const available_moves = position.hasLegalMoves(position.side_to_move);
-    const sufficient_material_black = position.hasSufficientMatingMaterial(.black);
-    const sufficient_material_white = position.hasSufficientMatingMaterial(.white);
 
     if (in_check and !available_moves) return .ok_mate;
-    if (position.meta.fiftyCounter() >= 100) return .ok_fifty_move_rule;
     if (!in_check and !available_moves) return .ok_stalemate;
-    // TODO: repitition
-    if (!sufficient_material_black and !sufficient_material_white) return .ok_insufficient_material;
-    if (in_check and available_moves) return .ok_check;
+    if (position.meta.fiftyCounter() >= 100) return .ok_fifty_move_rule;
 
+    const sufficient_material_black = position.hasSufficientMatingMaterial(.black);
+    const sufficient_material_white = position.hasSufficientMatingMaterial(.white);
+    if (!sufficient_material_black and !sufficient_material_white) return .ok_insufficient_material;
+    if (position.threefoldRepitition()) return .ok_repitition;
+
+    if (in_check and available_moves) return .ok_check;
     return .ok;
+}
+
+/// returns true if the current position was reached
+/// previously two or more times
+pub fn threefoldRepitition(position: Position) bool {
+    var count: i32 = 0;
+    for (position.hash_history.firstSlice()) |hash| {
+        if (hash == position.hash)
+            count += 1;
+        if (count >= 2) return true;
+    }
+    for (position.hash_history.secondSlice()) |hash| {
+        if (hash == position.hash)
+            count += 1;
+        if (count >= 2) return true;
+    }
+    return false;
 }
 
 /// determines if the affiliated side has enough material to deliver mate

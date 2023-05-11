@@ -502,8 +502,8 @@ fn cmdUndo(this: *Frontend, args: *ArgIterator) []const u8 {
     if (prev_move.move.bits.bits == chess.Move.invalid.bits.bits)
         this.position.swapSideToMove()
     else if (prev_move.move.source().eql(prev_move.move.dest())) {
-        this.position.undoSpawn(prev_move.move.dest(), prev_move.prev_meta);
-    } else this.position.undoMove(prev_move.move, prev_move.prev_meta);
+        this.position.undoSpawn(prev_move.move.dest(), prev_move.prev_meta, null);
+    } else this.position.undoMove(prev_move.move, prev_move.prev_meta, null);
     return this.confirmationStatus();
 }
 
