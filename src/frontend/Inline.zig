@@ -76,7 +76,7 @@ fn renderBoard(this: @This(), writer: *zcon.Writer) !void {
     const black_advantage = black_material - white_material;
     const white_advantage = white_material - black_material;
 
-    this.drawCaptured(writer, .black, black_advantage);
+    this.drawCaptured(writer, this.frontend.player_affiliation.opponent(), black_advantage);
     this.drawFileLine(writer);
 
     var rank_iter = this.frontend.rankIterator();
@@ -103,7 +103,7 @@ fn renderBoard(this: @This(), writer: *zcon.Writer) !void {
 
     this.drawFileLine(writer);
     writer.putChar('\n');
-    this.drawCaptured(writer, .white, white_advantage);
+    this.drawCaptured(writer, this.frontend.player_affiliation, white_advantage);
     writer.useDefaultColors();
 }
 
