@@ -286,19 +286,19 @@ fn input(cli: *zcon.Cli) !bool {
 
 /// callback to handle help options
 fn help(cli: *zcon.Cli) !bool {
-    cli.writer.put("\n==== Usage ====\n\n");
+    cli.writer.put("\n#yel ==== Usage ====#prv\n\n");
     cli.writer.indent(1);
-    cli.writer.put("hellochess (help|h)\n");
-    cli.writer.put("hellochess play [options]\n");
-    cli.writer.put("hellochess host <PORT> [options]\n");
-    cli.writer.put("hellochess join <ADDRESS>:<PORT> [options]\n");
-    cli.writer.put("\nnot all options are available for all commands\n");
+    cli.writer.put("hellochess (help|h)\n#indent#dgry display this help message#prv\n");
+    cli.writer.put("hellochess play [options]\n#indent#dgry start pass and play game#prv\n");
+    cli.writer.put("hellochess host <PORT> [options]\n#indent#dgry host peer to peer game#prv\n");
+    cli.writer.put("hellochess join <ADDRESS>:<PORT> [options]\n#indent#dgry join peer to peer game#prv\n");
+    cli.writer.put("\n#cyn;NOTE:#prv; not all options are available for all commands\n");
     cli.writer.unindent(1);
 
-    cli.writer.put("\n==== Options ====\n\n");
+    cli.writer.put("\n#yel ==== Options ====#prv\n\n");
     cli.writer.indent(1);
     cli.printOptionHelp(all_options);
-    cli.writer.put("--help, --h, -help, -h\n#indent display this help message\n");
+    cli.writer.put("--help, --h, -help, -h\n#indent#dgry display this help message#prv\n");
     cli.writer.unindent(1);
     cli.writer.putChar('\n');
     return false;
@@ -329,26 +329,26 @@ const all_options = zcon.Cli.OptionList(.{
 const opt_fullscreen = zcon.Cli.Option{
     .alias_long = "fullscreen",
     .alias_short = "",
-    .desc = "use the fullscreen frontend",
+    .desc = "#dgry use the fullscreen frontend",
     .help = "not sure this is used atm",
 };
 const opt_dev = zcon.Cli.Option{
     .alias_long = "enable-dev-commands",
     .alias_short = "",
-    .desc = "enable access to dev commands, also disables draws by insufficient materal",
+    .desc = "#dgry enable access to dev commands, also disables draws by insufficient materal",
     .help = "not sure this is used atm",
 };
 const opt_fen = zcon.Cli.Option{
     .alias_long = "fen",
     .alias_short = "",
-    .desc = "load position from fen string #dgry:<FEN>",
-    .arguments = "#dgry:<FEN>",
+    .desc = "#dgry load position from fen string #d:'#yel:<AFFILIATION>'",
+    .arguments = "#d:'#yel:<AFFILIATION>'",
     .help = "not sure this is used atm",
 };
 const opt_affiliation = zcon.Cli.Option{
     .alias_long = "affiliation",
     .alias_short = "a",
-    .arguments = "#dgry:<AFFILIATION>;",
-    .desc = "play as affiliation #dgry:<AFFILIATION>\n#dgry:<AFFILIATION>; can be one of #dgry:white;, #dgry:black;, or #dgry:random;",
+    .arguments = "#d:'#yel:<AFFILIATION>'",
+    .desc = "#dgry play as affiliation #d:'#yel:<AFFILIATION>'\n#d:'#yel:<AFFILIATION>'; can be one of #i:white;, #i:black;, or #i:random;",
     .help = "not sure this is used atm",
 };

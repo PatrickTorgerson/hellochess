@@ -1,15 +1,32 @@
 # Chess
 
-A currently unfinished implementation of chess with an ascii terminal front-end.
+An implementation of chess with an ascii terminal frontend.
+Supports pass and play, and peer to peer networking.
+Currently windows only. Run `hellochess --help` for CLI details.
 
 <img src="img/inline-frontend.png" alt="drawing" width="400"/>
 
 there's also a work in progress fullscreen mode with cli option `--fullscreen`
 
-<img src="img/fullscreen-frontend.png" alt="drawing" width="400"/>
+## Building
 
-currently windows only
+Building requires [git](https://git-scm.com) and the latest master build of [zig](https://ziglang.org/download/).
+Consider using a zig version manager like [zigup](https://github.com/marler8997/zigup/releases) for
+easier updating and/or version swapping.
 
+ 1. clone with `git clone --recursive https://github.com/PatrickTorgerson/hellochess.git`
+ 1. in the root project directory run `zig build`
+ 1. resulting exe can be found at `./zig-out/bin/hellochess.exe`
+
+## Planned Features (in no particular order)
+ * AI opponent
+ * UCI frontend
+ * Game analysis
+ * save/load games as PGN
+ * Fullscreen mode with mouse input
+ * linux support
+
+## License
 ---
 > MIT License
 >
