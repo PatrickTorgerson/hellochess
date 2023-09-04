@@ -115,7 +115,7 @@ fn drawFileLine(this: @This(), writer: *zcon.Writer) void {
     writer.put("#dgry;  ");
     var file_iter = this.frontend.fileIterator();
     while (file_iter.next()) |file| {
-        writer.fmt("{c} ", .{'a' + @intCast(u8, file.val())});
+        writer.fmt("{c} ", .{'a' + @as(u8, @intCast(file.val()))});
     }
     writer.put("\n");
 }

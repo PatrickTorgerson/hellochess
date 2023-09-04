@@ -41,24 +41,24 @@ const offset_flag = 12;
 
 pub fn init(source_: Coordinate, dest_: Coordinate, flag_: Flag) Move {
     var this = Move{ .bits = .{} };
-    this.bits.set(u6, offset_source, @intCast(u6, source_.value));
-    this.bits.set(u6, offset_dest, @intCast(u6, dest_.value));
-    this.bits.set(u4, offset_flag, @enumToInt(flag_));
+    this.bits.set(u6, offset_source, @as(u6, @intCast(source_.value)));
+    this.bits.set(u6, offset_dest, @as(u6, @intCast(dest_.value)));
+    this.bits.set(u4, offset_flag, @intFromEnum(flag_));
     return this;
 }
 
 pub fn setFlag(move: *Move, flag_: Flag) void {
-    move.bits.set(u4, offset_flag, @enumToInt(flag_));
+    move.bits.set(u4, offset_flag, @intFromEnum(flag_));
 }
 
 /// return source coordinate
 pub fn source(move: Move) Coordinate {
-    return Coordinate.from1d(@intCast(i8, move.bits.get(u6, offset_source)));
+    return Coordinate.from1d(@intCast(move.bits.get(u6, offset_source)));
 }
 
 /// return destination coordinate
 pub fn dest(move: Move) Coordinate {
-    return Coordinate.from1d(@intCast(i8, move.bits.get(u6, offset_dest)));
+    return Coordinate.from1d(@intCast(move.bits.get(u6, offset_dest)));
 }
 
 /// return move flag, possible values:
@@ -71,7 +71,7 @@ pub fn dest(move: Move) Coordinate {
 ///   - castle, castling, direction is determined by dest coord
 ///   - pawn_double_push, pawn double push on first move
 pub fn flag(move: Move) Flag {
-    return @intToEnum(Flag, move.bits.get(u4, offset_flag));
+    return @enumFromInt(move.bits.get(u4, offset_flag));
 }
 
 /// if move represents a pawn promotion, return

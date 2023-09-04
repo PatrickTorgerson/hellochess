@@ -24,15 +24,15 @@ pub const Rank = enum(i8) {
     rank_8,
 
     pub fn init(value: i8) Rank {
-        return @intToEnum(Rank, value);
+        return @enumFromInt(value);
     }
 
     pub fn val(rank: Rank) i8 {
-        return @enumToInt(rank);
+        return @intFromEnum(rank);
     }
 
     pub fn index(rank: Rank) usize {
-        return @intCast(usize, rank.val());
+        return @intCast(rank.val());
     }
 
     pub fn iterator(rank: Rank) EnumIterator(Rank) {
@@ -56,11 +56,11 @@ pub const File = enum(i8) {
     file_h,
 
     pub fn init(value: i8) File {
-        return @intToEnum(File, value);
+        return @enumFromInt(value);
     }
 
     pub fn val(file: File) i8 {
-        return @enumToInt(file);
+        return @intFromEnum(file);
     }
 
     /// returns file just left of `file`
@@ -68,7 +68,7 @@ pub const File = enum(i8) {
     pub fn west(file: File) ?File {
         return switch (file) {
             .file_a => null,
-            else => @intToEnum(File, @enumToInt(file) - 1),
+            else => @enumFromInt(@intFromEnum(file) - 1),
         };
     }
 
@@ -77,12 +77,12 @@ pub const File = enum(i8) {
     pub fn east(file: File) ?File {
         return switch (file) {
             .file_h => null,
-            else => @intToEnum(File, @enumToInt(file) + 1),
+            else => @enumFromInt(@intFromEnum(file) + 1),
         };
     }
 
     pub fn index(file: File) usize {
-        return @intCast(usize, file.val());
+        return @as(usize, @intCast(file.val()));
     }
 
     pub fn iterator(file: File) EnumIterator(File) {
@@ -182,7 +182,7 @@ pub const Direction = enum(u3) {
 
     /// returns enum value as usize
     pub fn asUsize(dir: Direction) usize {
-        return @intCast(usize, @enumToInt(dir));
+        return @as(usize, @intCast(@intFromEnum(dir)));
     }
 };
 
@@ -244,7 +244,7 @@ pub const DirectionalIterator = struct {
 
         const length = std.math.max(abs(rank_diff), abs(file_diff));
 
-        return DirectionalIterator.init(source, dir, @intCast(i8, length) - 1);
+        return DirectionalIterator.init(source, dir, @as(i8, @intCast(length)) - 1);
     }
 
     pub fn next(iter: *DirectionalIterator) ?Coordinate {
@@ -308,7 +308,7 @@ pub fn valid(coord: Coordinate) bool {
 /// return coord as 1d index
 pub fn index(coord: Coordinate) usize {
     std.debug.assert(coord.valid());
-    return @intCast(usize, coord.value);
+    return @as(usize, @intCast(coord.value));
 }
 
 /// return file coord lies on
@@ -332,7 +332,7 @@ pub fn eql(coord: Coordinate, other: Coordinate) bool {
 /// such that coord gets left on the edge of board
 /// returns false if coord was clamped due to bounds failure
 pub fn offsetDir(coord: *Coordinate, dir: Direction, amt: i8) bool {
-    const multiplier = std.math.min(amt, squares_to_edge[coord.index()][dir.asUsize()]);
+    const multiplier = @min(amt, squares_to_edge[coord.index()][dir.asUsize()]);
     coord.value += dir.offset() * multiplier;
     return multiplier == amt;
 }
@@ -343,14 +343,14 @@ pub fn offsetDir(coord: *Coordinate, dir: Direction, amt: i8) bool {
 /// returns false if coord was clamped due to bounds failure
 pub fn offset(coord: *Coordinate, file_offset: i8, rank_offset: i8) bool {
     const capped_file_offset = if (file_offset > 0)
-        std.math.min(file_offset, squares_to_edge[coord.index()][Direction.east.asUsize()])
+        @min(file_offset, squares_to_edge[coord.index()][Direction.east.asUsize()])
     else
-        std.math.max(file_offset, -squares_to_edge[coord.index()][Direction.west.asUsize()]);
+        @max(file_offset, -squares_to_edge[coord.index()][Direction.west.asUsize()]);
 
     const capped_rank_offset = if (rank_offset > 0)
-        std.math.min(rank_offset, squares_to_edge[coord.index()][Direction.north.asUsize()])
+        @min(rank_offset, squares_to_edge[coord.index()][Direction.north.asUsize()])
     else
-        std.math.max(rank_offset, -squares_to_edge[coord.index()][Direction.south.asUsize()]);
+        @max(rank_offset, -squares_to_edge[coord.index()][Direction.south.asUsize()]);
 
     coord.value += capped_file_offset + -capped_rank_offset * 8;
     return capped_file_offset == file_offset and capped_rank_offset == rank_offset;
@@ -379,13 +379,13 @@ pub fn offsetted(coord: Coordinate, file_offset: i8, rank_offset: i8) ?Coordinat
 /// return file from standard chess file letter ascii
 pub fn fileFromChar(char: u8) File {
     std.debug.assert(isFile(char));
-    return File.init(@intCast(i8, char) - 'a');
+    return File.init(@as(i8, @intCast(char)) - 'a');
 }
 
 /// return rank from standard chess rank number ascii
 pub fn rankFromChar(char: u8) Rank {
     std.debug.assert(isRank(char));
-    return Rank.init(@intCast(i8, char) - '1');
+    return Rank.init(@as(i8, @intCast(char)) - '1');
 }
 
 /// return if ascii char represents a valid rank
@@ -416,10 +416,10 @@ const squares_to_edge: [64][8]i8 = blk: {
             num_to_edge[i][Direction.south.asUsize()] = south;
             num_to_edge[i][Direction.east.asUsize()] = east;
             num_to_edge[i][Direction.west.asUsize()] = west;
-            num_to_edge[i][Direction.northeast.asUsize()] = std.math.min(north, east);
-            num_to_edge[i][Direction.northwest.asUsize()] = std.math.min(north, west);
-            num_to_edge[i][Direction.southeast.asUsize()] = std.math.min(south, east);
-            num_to_edge[i][Direction.southwest.asUsize()] = std.math.min(south, west);
+            num_to_edge[i][Direction.northeast.asUsize()] = @min(north, east);
+            num_to_edge[i][Direction.northwest.asUsize()] = @min(north, west);
+            num_to_edge[i][Direction.southeast.asUsize()] = @min(south, east);
+            num_to_edge[i][Direction.southwest.asUsize()] = @min(south, west);
         }
     }
     break :blk num_to_edge;

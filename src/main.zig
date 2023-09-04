@@ -110,7 +110,7 @@ fn waitForClient(writer: *zcon.Writer) !network.Socket {
     });
 
     // send affiliation to client
-    const opponent = @intCast(u8, @enumToInt(player_affiliation.opponent()));
+    const opponent = @as(u8, @intCast(@intFromEnum(player_affiliation.opponent())));
     _ = try client.send(&[_]u8{opponent});
 
     return client;
@@ -132,7 +132,7 @@ fn connectToHost(writer: *zcon.Writer, allocator: std.mem.Allocator) !network.So
     if (read == 0)
         return error.SocketNotConnected;
 
-    player_affiliation = @intToEnum(Affiliation, affiliation[0]);
+    player_affiliation = @as(Affiliation, @enumFromInt(affiliation[0]));
 
     return sock;
 }

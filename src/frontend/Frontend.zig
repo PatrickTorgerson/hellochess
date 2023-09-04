@@ -4,7 +4,9 @@
 //  MIT license, see LICENSE for more information
 // *******************************************************
 
+//!
 //! General utility code for front end
+//!
 
 const std = @import("std");
 const chess = @import("../hellochess.zig");
@@ -221,7 +223,7 @@ pub fn printStatus(this: *Frontend, writer: *zcon.Writer) void {
         writer.fmt("#dgry; {s}#prv;: {s}\n", .{ this.getLastInput(), this.status });
     } else {
         var start: usize = 0;
-        var end = std.math.min(this.status.len, status_max_width);
+        var end: usize = @min(this.status.len, status_max_width);
 
         while (end < this.status.len and this.status[end] != ' ')
             end += 1;
@@ -232,7 +234,7 @@ pub fn printStatus(this: *Frontend, writer: *zcon.Writer) void {
         while (start < this.status.len) {
             while (start < this.status.len and this.status[start] == ' ')
                 start += 1;
-            end = start + std.math.min(this.status.len - start, status_max_width);
+            end = start + @min(this.status.len - start, status_max_width);
             while (end < this.status.len and this.status[end] != ' ')
                 end += 1;
             writer.clearLine();
@@ -248,9 +250,9 @@ pub fn printStatus(this: *Frontend, writer: *zcon.Writer) void {
 }
 
 pub fn printHistory(this: *Frontend, writer: *zcon.Writer, column: i16, lines: i32) void {
-    var start = std.math.min(
+    var start = @min(
         this.move_top -| 1,
-        this.move_count -| @intCast(usize, lines * 2) + 1,
+        this.move_count -| @as(usize, @intCast(lines * 2)) + 1,
     );
     if (start % 2 == 1)
         start -= 1;
@@ -399,7 +401,7 @@ fn writeMoveText(this: *Frontend, move: chess.Move.Result) !void {
     const start = if (this.move_top == 0)
         0
     else
-        @ptrToInt(this.move_slices[this.move_top - 1].ptr) - @ptrToInt(&this.move_slice_buffer[0]) + this.move_slices[this.move_top - 1].len;
+        @intFromPtr(this.move_slices[this.move_top - 1].ptr) - @intFromPtr(&this.move_slice_buffer[0]) + this.move_slices[this.move_top - 1].len;
     var stream = std.io.fixedBufferStream(this.move_slice_buffer[start..]);
     var writer = stream.writer();
 
@@ -600,7 +602,7 @@ fn commandListStatus(this: *Frontend) []const u8 {
 /// return random confirmation status message
 fn confirmationStatus(this: *Frontend) []const u8 {
     _ = this;
-    const seed = @truncate(u64, @bitCast(u128, std.time.nanoTimestamp()));
+    const seed = @as(u64, @truncate(@as(u128, @bitCast(std.time.nanoTimestamp()))));
     var rand = std.rand.DefaultPrng.init(seed);
     const responses = [_][]const u8{
         "gotcha",

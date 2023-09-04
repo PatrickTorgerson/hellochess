@@ -19,7 +19,7 @@ pub fn EnumIterator(comptime E: type) type {
 
         pub fn init(initial: E, direction: Direction) @This() {
             return .{
-                .i = @enumToInt(initial),
+                .i = @intFromEnum(initial),
                 .dir = direction,
             };
         }
@@ -33,7 +33,7 @@ pub fn EnumIterator(comptime E: type) type {
                     .forward => this.i += 1,
                 }
             }
-            return @intToEnum(E, this.i);
+            return @as(E, @enumFromInt(this.i));
         }
     };
 }
@@ -62,14 +62,14 @@ pub fn Bitfield(comptime T: type) type {
             const len = @typeInfo(V).Int.bits;
             std.debug.assert(offset + len <= @typeInfo(T).Int.bits);
             this.bits &= ~mask(offset, len);
-            this.bits |= @intCast(T, val) << offset;
+            this.bits |= @as(T, @intCast(val)) << offset;
         }
 
         pub fn get(this: @This(), comptime V: type, offset: Index) V {
             std.debug.assert(std.meta.trait.isUnsignedInt(V));
             const len = @typeInfo(V).Int.bits;
             std.debug.assert(offset + len <= @typeInfo(T).Int.bits);
-            return @intCast(V, (this.bits & mask(offset, len)) >> offset);
+            return @intCast((this.bits & mask(offset, len)) >> offset);
         }
 
         pub fn mask(offset: Index, len: Index) T {

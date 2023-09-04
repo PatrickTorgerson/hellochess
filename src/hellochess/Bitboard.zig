@@ -58,7 +58,7 @@ pub const Iterator = struct {
 
     pub fn next(iter: *Iterator) ?Coordinate {
         if (iter.iter.next()) |index|
-            return Coordinate.from1d(@intCast(i8, index))
+            return Coordinate.from1d(@intCast(index))
         else
             return null;
     }

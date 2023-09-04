@@ -227,7 +227,7 @@ pub const MoveIterator = struct {
 
         // promotions
         if (this.coord.getRank() == affiliation.opponent().secondRank()) {
-            const promotion_flag = @intToEnum(Move.Flag, @intCast(u4, this.high32() + 1));
+            const promotion_flag: Move.Flag = @enumFromInt(@as(u4, @intCast(this.high32() + 1)));
             this.i += 0x100000000; // inc high 32
             if (this.high32() >= 4) {
                 this.i &= 0x00000000ffffffff; // clear high 32
@@ -263,7 +263,7 @@ pub const MoveIterator = struct {
             // blackqueen
             &[_]Coordinate{ Coordinate.e8, Coordinate.d8, Coordinate.c8 },
         };
-        const index = @enumToInt(side) + @intCast(usize, @enumToInt(affiliation)) * 2;
+        const index = @intFromEnum(side) + @as(usize, @intCast(@intFromEnum(affiliation))) * 2;
         const targets = target_coords[index];
 
         // cannot castle through check
@@ -285,12 +285,12 @@ pub const MoveIterator = struct {
 
     /// returns the least significant 32 bits from `MoveIterator.i`
     fn low32(this: MoveIterator) u32 {
-        return @intCast(u32, this.i & 0x00000000ffffffff);
+        return @intCast(this.i & 0x00000000ffffffff);
     }
 
     /// returns the most significant 32 bits from `MoveIterator.i`
     fn high32(this: MoveIterator) u32 {
-        return @intCast(u32, (this.i & 0xffffffff00000000) >> 32);
+        return @intCast((this.i & 0xffffffff00000000) >> 32);
     }
 };
 
@@ -522,8 +522,8 @@ fn expectEqualMovesets(expected: []Move, actual: []Move) !void {
         std.debug.print("move counts differ, expected {}, found {}\n", .{ expected.len, actual.len });
         return error.TestExpectEqualMovesets;
     }
-    std.sort.sort(Move, expected, {}, lessThanMove);
-    std.sort.sort(Move, actual, {}, lessThanMove);
+    std.sort.insertion(Move, expected, {}, lessThanMove);
+    std.sort.insertion(Move, actual, {}, lessThanMove);
     try std.testing.expectEqualSlices(Move, expected, actual);
 }
 

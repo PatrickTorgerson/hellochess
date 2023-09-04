@@ -83,8 +83,8 @@ pub fn enpassantFileHashValue(file: Coordinate.File) Hash {
 fn valueIndex(coord_index: usize, class: Class, affiliation: Affiliation) usize {
     const class_size = std.meta.fields(@TypeOf(class)).len;
     const affiliation_size = std.meta.fields(@TypeOf(affiliation)).len;
-    const class_index = @intCast(usize, @enumToInt(class));
-    const affiliation_index = @intCast(usize, @enumToInt(affiliation));
+    const class_index = @as(usize, @intCast(@intFromEnum(class)));
+    const affiliation_index = @as(usize, @intCast(@intFromEnum(affiliation)));
     return (coord_index * class_size * affiliation_size) +
         (affiliation_index * class_size) +
         class_index + 13;

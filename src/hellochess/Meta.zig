@@ -102,7 +102,7 @@ pub fn castleQueenBit(meta: Meta, affiliation: Affiliation) u1 {
 
 pub fn enpassantFile(meta: Meta) ?File {
     const val = meta.bits.get(u4, offset_enpassant);
-    return if (val == 0) null else @intToEnum(File, val - 1);
+    return if (val == 0) null else @as(File, @enumFromInt(val - 1));
 }
 
 pub fn capturedPiece(meta: Meta) Piece {
@@ -115,21 +115,21 @@ pub fn fiftyCounter(meta: Meta) u18 {
 
 pub fn setCastleKing(meta: *Meta, affiliation: Affiliation, val: bool) void {
     switch (affiliation) {
-        .white => meta.bits.set(u1, offset_whiteking, @boolToInt(val)),
-        .black => meta.bits.set(u1, offset_blackking, @boolToInt(val)),
+        .white => meta.bits.set(u1, offset_whiteking, @intFromBool(val)),
+        .black => meta.bits.set(u1, offset_blackking, @intFromBool(val)),
     }
 }
 
 pub fn setCastleQueen(meta: *Meta, affiliation: Affiliation, val: bool) void {
     switch (affiliation) {
-        .white => meta.bits.set(u1, offset_whitequeen, @boolToInt(val)),
-        .black => meta.bits.set(u1, offset_blackqueen, @boolToInt(val)),
+        .white => meta.bits.set(u1, offset_whitequeen, @intFromBool(val)),
+        .black => meta.bits.set(u1, offset_blackqueen, @intFromBool(val)),
     }
 }
 
 pub fn setEnpassantFile(meta: *Meta, file: ?File) void {
     if (file) |f|
-        meta.bits.set(u4, offset_enpassant, @intCast(u4, f.val() + 1))
+        meta.bits.set(u4, offset_enpassant, @as(u4, @intCast(f.val() + 1)))
     else
         meta.bits.set(u4, offset_enpassant, 0);
 }

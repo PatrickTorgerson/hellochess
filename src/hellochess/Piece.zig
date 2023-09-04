@@ -18,7 +18,7 @@ pub const Affiliation = enum(u1) {
 
     /// returns enum value as usize
     pub fn index(affiliation_: Affiliation) usize {
-        return @intCast(usize, @enumToInt(affiliation_));
+        return @as(usize, @intCast(@intFromEnum(affiliation_)));
     }
 
     /// returns other affiliation
@@ -177,9 +177,9 @@ const offset_class = 0;
 /// create piece from a class and affiliation
 pub fn init(class_: Class, affiliation_: Affiliation) Piece {
     var this = Piece{ .bits = .{} };
-    this.bits.set(u1, offset_empty, @boolToInt(true)); // true mean no empty
-    this.bits.set(u1, offset_affiliation, @enumToInt(affiliation_));
-    this.bits.set(u4, offset_class, @enumToInt(class_));
+    this.bits.set(u1, offset_empty, @intFromBool(true)); // true mean no empty
+    this.bits.set(u1, offset_affiliation, @intFromEnum(affiliation_));
+    this.bits.set(u4, offset_class, @intFromEnum(class_));
     return this;
 }
 
@@ -208,7 +208,7 @@ pub fn class(piece: Piece) ?Class {
     return if (piece.isEmpty())
         null
     else
-        @intToEnum(Class, piece.bits.get(u4, offset_class));
+        @enumFromInt(piece.bits.get(u4, offset_class));
 }
 
 /// return piece's affiliation
@@ -216,7 +216,7 @@ pub fn affiliation(piece: Piece) ?Affiliation {
     return if (piece.isEmpty())
         null
     else
-        @intToEnum(Affiliation, piece.bits.get(u1, offset_affiliation));
+        @enumFromInt(piece.bits.get(u1, offset_affiliation));
 }
 
 /// return piece's material value
@@ -263,7 +263,7 @@ pub fn isAffiliated(piece: Piece, affiliation_: Affiliation) bool {
     return if (piece.isEmpty())
         false
     else
-        @intToEnum(Affiliation, piece.bits.get(u1, offset_affiliation)) == affiliation_;
+        @as(Affiliation, @enumFromInt(piece.bits.get(u1, offset_affiliation))) == affiliation_;
 }
 
 /// compare two pieces for equality

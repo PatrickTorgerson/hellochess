@@ -107,7 +107,7 @@ pub fn parse(fen: []const u8) Error!Position {
                 else => return Error.invalid_character,
             };
             position.squares[square_index] = Piece.init(class, affiliation);
-            const coord = Coordinate.from1d(@intCast(i8, square_index));
+            const coord = Coordinate.from1d(@intCast(square_index));
             position.pieces[affiliation.index()].set(coord, true);
             switch (class) {
                 .king => position.kings[affiliation.index()] = coord,
@@ -339,7 +339,7 @@ fn expectBitboardInSync(position: Position) !void {
     var index: usize = 0;
     while (index < 64) : (index += 1) {
         const piece = position.squares[index];
-        const coord = Coordinate.from1d(@intCast(i8, index));
+        const coord = Coordinate.from1d(@as(i8, @intCast(index)));
 
         if (piece.class() == Class.king) {
             if (!position.kings[piece.affiliation().?.index()].eql(coord)) {
