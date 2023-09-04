@@ -268,7 +268,11 @@ fn option(cli: *zcon.Cli) !bool {
         else if (std.mem.eql(u8, affiliation, "black"))
             player_affiliation = .black
         else if (std.mem.eql(u8, affiliation, "random")) {
-            var rng = std.rand.DefaultPrng.init((try std.time.Instant.now()).timestamp);
+            const seed: u64 = if (@import("builtin").os.tag == .linux)
+                @intCast((try std.time.Instant.now()).timestamp.tv_nsec)
+            else
+                (try std.time.Instant.now()).timestamp;
+            var rng = std.rand.DefaultPrng.init(seed);
             if (rng.random().boolean())
                 player_affiliation = .white
             else

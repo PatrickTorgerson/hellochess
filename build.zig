@@ -6,6 +6,7 @@
 
 const std = @import("std");
 const zcon = @import("src/zcon/build.zig");
+const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) void {
     // Standard target options allows the person running `zig build` to choose
@@ -32,6 +33,9 @@ pub fn build(b: *std.Build) void {
     });
     exe.addModule("zcon", zcon_module);
     exe.addModule("network", network_module);
+    if (builtin.os.tag != .windows) {
+        exe.linkSystemLibrary("c");
+    }
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
