@@ -2,7 +2,7 @@
 
 An implementation of chess with an ascii terminal frontend.
 Supports pass and play, and peer to peer networking.
-Currently windows only. Run `hellochess --help` for CLI details.
+Run `hellochess --help` for CLI details.
 
 <img src="img/inline-frontend.png" alt="drawing" width="400"/>
 
