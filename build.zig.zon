@@ -1,0 +1,18 @@
+.{
+    .name = "hellochess",
+    .version = "1.0.0",
+    .dependencies = .{
+        .network = .{
+            .url = "https://github.com/MasterQ32/zig-network/archive/830821a8736ca1bf7662b9c5fec9bfe9f0066ad3.tar.gz",
+            .hash = "1220ff9d897573586bce7d0beb2552e77376d56b02d91a7dbafa3f2dfa26f148dc4a",
+        },
+        .zcon = .{
+            .url = "https://github.com/PatrickTorgerson/zcon/archive/v1.0.1.tar.gz",
+            .hash = "1220da8b153f9c505825ab589eef9295bfc85e84d5284d86dc338b987c9cfb220318",
+        },
+        .parsley = .{
+            .url = "https://github.com/PatrickTorgerson/parsley/archive/v1.0.0.tar.gz",
+            .hash = "12200248c8c8c8ca6d959c45e843da886bd1eb921a85bd3b046c13ef2985c4752259",
+        },
+    },
+}

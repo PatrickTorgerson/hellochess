@@ -1,6 +1,0 @@
-[submodule "src/zcon"]
-	path = src/zcon
-	url = https://github.com/PatrickTorgerson/zcon.git
-[submodule "src/zig-network"]
-	path = src/zig-network
-	url = https://github.com/MasterQ32/zig-network.git

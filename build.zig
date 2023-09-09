@@ -5,25 +5,14 @@
 // ********************************************************************************
 
 const std = @import("std");
-const zcon = @import("src/zcon/build.zig");
 const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) void {
-    // Standard target options allows the person running `zig build` to choose
-    // what target to build for. Here we do not override the defaults, which
-    // means any target is allowed, and the default is native. Other options
-    // for restricting supported target set are available.
     const target = b.standardTargetOptions(.{});
-
-    // Standard optimization options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
-    // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const zcon_module = zcon.module(b);
-    const network_module = b.addModule("network", .{
-        .source_file = .{ .path = "src/zig-network/network.zig" },
-    });
+    const zcon_module = b.dependency("zcon", .{}).module("zcon");
+    const network_module = b.dependency("network", .{}).module("network");
 
     const exe = b.addExecutable(.{
         .name = "hellochess",

@@ -10,11 +10,11 @@ there's also a work in progress fullscreen mode with cli option `--fullscreen`
 
 ## Building
 
-Building requires [git](https://git-scm.com) and the latest master build of [zig](https://ziglang.org/download/).
+Building requires [git](https://git-scm.com) and [zig](https://ziglang.org/download/) 0.11.0.
 Consider using a zig version manager like [zigup](https://github.com/marler8997/zigup) for
 easier updating and/or version swapping.
 
- 1. clone with `git clone --recursive https://github.com/PatrickTorgerson/hellochess.git`
+ 1. clone with `git clone https://github.com/PatrickTorgerson/hellochess.git`
  1. in the root project directory run `zig build`
  1. resulting exe can be found at `./zig-out/bin/hellochess.exe`
 
