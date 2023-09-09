@@ -11,8 +11,9 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const zcon_module = b.dependency("zcon", .{}).module("zcon");
-    const network_module = b.dependency("network", .{}).module("network");
+    const parsley = b.dependency("parsley", .{}).module("parsley");
+    const zcon = b.dependency("zcon", .{}).module("zcon");
+    const network = b.dependency("network", .{}).module("network");
 
     const exe = b.addExecutable(.{
         .name = "hellochess",
@@ -20,8 +21,9 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    exe.addModule("zcon", zcon_module);
-    exe.addModule("network", network_module);
+    exe.addModule("parsley", parsley);
+    exe.addModule("zcon", zcon);
+    exe.addModule("network", network);
     if (builtin.os.tag != .windows) {
         exe.linkSystemLibrary("c");
     }
