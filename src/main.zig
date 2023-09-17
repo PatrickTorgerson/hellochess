@@ -17,11 +17,19 @@ pub fn main() !void {
     defer writer.flush();
     defer writer.useDefaultColors();
 
+    writer.putRaw("\n");
+    defer writer.putRaw("\n");
+
     try parsley.run(allocator, &writer, &.{
         @import("play.zig"),
         @import("host.zig"),
         @import("join.zig"),
-    }, .{ .command_descriptions = command_descriptions });
+    }, .{
+        .command_descriptions = command_descriptions,
+        .help_header_fmt = "#byel;:: {s} ::#prv;\n\n",
+        .help_option_description_fmt = "\n    #dgry;{s}#prv;\n",
+        .help_option_argument_fmt = "#i;{s}#i:off; ",
+    });
 }
 
 const command_descriptions = &[_]parsley.CommandDescription{.{
@@ -29,7 +37,5 @@ const command_descriptions = &[_]parsley.CommandDescription{.{
     .line = "not used",
     .full =
     \\ It's chess, on the command line
-    \\
-    \\ Usage: hellochess <command> [args] [options]
     ,
 }};

@@ -11,8 +11,8 @@
             .hash = "1220da8b153f9c505825ab589eef9295bfc85e84d5284d86dc338b987c9cfb220318",
         },
         .parsley = .{
-            .url = "https://github.com/PatrickTorgerson/parsley/archive/v1.0.1.tar.gz",
-            .hash = "1220b585a25d41565129d59af0ba013b11933063ddec1f35945682627a3aa350e79b",
+            .url = "https://github.com/PatrickTorgerson/parsley/archive/v1.1.2.tar.gz",
+            .hash = "1220ea3fee8991f854c6adb180d5a425a81e8c217309ac992320e45e8dd8858a0f64",
         },
     },
 }

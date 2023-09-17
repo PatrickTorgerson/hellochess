@@ -17,7 +17,7 @@ const Affiliation = @import("hellochess/Piece.zig").Affiliation;
 
 pub const command_sequence = "join";
 pub const description_line = "join peer to peer game";
-pub const description_full = description_line ++ "\n\nusage: hellochess join <address> [options]";
+pub const description_full = description_line;
 pub const positionals = &[_]parsley.Positional{
     .{ "address", .string },
 };

@@ -17,7 +17,7 @@ const Affiliation = @import("hellochess/Piece.zig").Affiliation;
 
 pub const command_sequence = "host";
 pub const description_line = "host peer to peer game";
-pub const description_full = description_line ++ "\n\nusage: hellochess host <port> [options]";
+pub const description_full = description_line;
 pub const positionals = &[_]parsley.Positional{
     .{ "port", .integer },
 };
@@ -107,7 +107,7 @@ pub const options = &[_]parsley.Option{
     .{
         .name = "affiliation",
         .name_short = 'a',
-        .description = "set player affiliation, can be one of #i:white;, #i:black;, or #i:random;",
+        .description = "set player affiliation, can be one of #i #b:white;, #b:black;, or #b:random;#i:off;",
         .arguments = &[_]parsley.Argument{.string},
     },
 };
