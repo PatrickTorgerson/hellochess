@@ -51,14 +51,12 @@ test "EnumIterator" {
 
 /// Allows getting and setting bit ranges in an unsigned integer
 pub fn Bitfield(comptime T: type) type {
-    std.debug.assert(std.meta.trait.isUnsignedInt(T));
     return struct {
         bits: T = 0,
 
         pub const Index = std.math.Log2Int(T);
 
         pub fn set(this: *@This(), comptime V: type, offset: Index, val: V) void {
-            std.debug.assert(std.meta.trait.isUnsignedInt(V));
             const len = @typeInfo(V).Int.bits;
             std.debug.assert(offset + len <= @typeInfo(T).Int.bits);
             this.bits &= ~mask(offset, len);
@@ -66,7 +64,6 @@ pub fn Bitfield(comptime T: type) type {
         }
 
         pub fn get(this: @This(), comptime V: type, offset: Index) V {
-            std.debug.assert(std.meta.trait.isUnsignedInt(V));
             const len = @typeInfo(V).Int.bits;
             std.debug.assert(offset + len <= @typeInfo(T).Int.bits);
             return @intCast((this.bits & mask(offset, len)) >> offset);

@@ -23,6 +23,7 @@ pub const positionals = &[_]parsley.Positional{
 };
 
 pub fn run(
+    _: *void,
     allocator: std.mem.Allocator,
     writer: *zcon.Writer,
     poss: parsley.Positionals(@This()),
@@ -35,7 +36,7 @@ pub fn run(
         writer.fmt("invalid address\n", .{});
         return;
     };
-    var result = connectToHost(writer, allocator, address[0], address[1]) catch |err| {
+    const result = connectToHost(writer, allocator, address[0], address[1]) catch |err| {
         writer.fmt("failed to connect ({s})\n", .{@errorName(err)});
         return;
     };

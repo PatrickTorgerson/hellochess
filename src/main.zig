@@ -20,7 +20,7 @@ pub fn main() !void {
     writer.putRaw("\n");
     defer writer.putRaw("\n");
 
-    try parsley.run(allocator, &writer, &.{
+    try parsley.executeCommandLine(void, undefined, allocator, &writer, &.{
         @import("play.zig"),
         @import("host.zig"),
         @import("join.zig"),

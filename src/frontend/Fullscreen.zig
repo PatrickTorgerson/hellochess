@@ -54,13 +54,13 @@ pub fn drawBoard(this: @This(), writer: *zcon.Writer) !void {
         var file_iter = chess.File.file_a.iterator();
         while (file_iter.next()) |file| {
             writer.setBackground(
-                if (try std.math.absInt(@mod(rank.val(), 2) - @mod(file.val(), 2)) == 0)
+                if (@abs(@mod(rank.val(), 2) - @mod(file.val(), 2)) == 0)
                     col_dark_square
                 else
                     col_light_square,
             );
             writer.setForeground(
-                if (try std.math.absInt(@mod(rank.val(), 2) - @mod(file.val(), 2)) == 0)
+                if (@abs(@mod(rank.val(), 2) - @mod(file.val(), 2)) == 0)
                     col_light_square
                 else
                     col_dark_square,

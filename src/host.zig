@@ -23,6 +23,7 @@ pub const positionals = &[_]parsley.Positional{
 };
 
 pub fn run(
+    _: *void,
     _: std.mem.Allocator,
     writer: *zcon.Writer,
     poss: parsley.Positionals(@This()),
@@ -35,7 +36,7 @@ pub fn run(
         writer.fmt("invalid affiliation '{s}'\n", .{opts.affiliation orelse "random"});
         return;
     };
-    var client = waitForClient(writer, @intCast(poss.port), affiliation) catch |err| {
+    const client = waitForClient(writer, @intCast(poss.port), affiliation) catch |err| {
         writer.fmt("failed to connect ({s})\n", .{@errorName(err)});
         return;
     };

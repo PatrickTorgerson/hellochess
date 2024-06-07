@@ -458,7 +458,7 @@ fn cmdHelp(this: *Frontend, args: *ArgIterator) []const u8 {
     const arg = args.next() orelse
         return this.commandListStatus();
     this.status_buffer[0] = '/';
-    std.mem.copy(u8, this.status_buffer[1 .. 1 + arg.len], arg);
+    @memcpy(this.status_buffer[1 .. 1 + arg.len], arg);
     if (commands.get(this.status_buffer[0 .. 1 + arg.len])) |cmd| {
         return cmd.help;
     } else return "#red no such command";
@@ -570,7 +570,7 @@ fn cmdLoad(this: *Frontend, args: *ArgIterator) []const u8 {
 fn cmdFen(this: *Frontend, args: *ArgIterator) []const u8 {
     _ = args;
     var stream = std.io.fixedBufferStream(&this.status_buffer);
-    var writer = stream.writer();
+    const writer = stream.writer();
     chess.fen.writePosition(writer, this.position) catch return "#bred write error";
     this.no_wrap = true;
     return this.status_buffer[0..stream.pos];
@@ -708,7 +708,7 @@ fn badNotationStatus(this: *Frontend, input: []const u8) []const u8 {
     const arg = arg_iter.next() orelse "";
 
     this.status_buffer[0] = '/';
-    std.mem.copy(u8, this.status_buffer[1 .. 1 + arg.len], arg);
+    @memcpy(this.status_buffer[1 .. 1 + arg.len], arg);
 
     if (commands.get(this.status_buffer[0 .. 1 + arg.len])) |_| {
         return "#red did you forget a slash?";
@@ -864,7 +864,7 @@ const commands = std.ComptimeStringMap(Command, .{
     } },
     .{ "/fen", .{
         .impl = cmdFen,
-        .help = "displays the cuurren position as a fen string",
+        .help = "displays the cuurrent position as a fen string",
         .scopes = all_scopes,
     } },
 

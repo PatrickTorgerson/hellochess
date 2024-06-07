@@ -19,6 +19,7 @@ pub const description_full = description_line;
 pub const positionals = &[_]parsley.Positional{};
 
 pub fn run(
+    _: *void,
     _: std.mem.Allocator,
     writer: *zcon.Writer,
     _: parsley.Positionals(@This()),

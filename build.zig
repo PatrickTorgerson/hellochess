@@ -17,13 +17,13 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "hellochess",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
-    exe.addModule("parsley", parsley);
-    exe.addModule("zcon", zcon);
-    exe.addModule("network", network);
+    exe.root_module.addImport("parsley", parsley);
+    exe.root_module.addImport("zcon", zcon);
+    exe.root_module.addImport("network", network);
     if (builtin.os.tag != .windows) {
         exe.linkSystemLibrary("c");
     }
@@ -40,7 +40,7 @@ pub fn build(b: *std.Build) void {
 
     const exe_tests = b.addTest(.{
         .name = "hellotests",
-        .root_source_file = .{ .path = "src/hellochess.zig" },
+        .root_source_file = b.path("src/hellochess.zig"),
         .target = target,
         .optimize = optimize,
     });
