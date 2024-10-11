@@ -34,7 +34,7 @@ pub fn run(this: *@This(), writer: *zcon.Writer) !void {
     defer this.frontend.deinit();
 
     writer.put("\n#wht ================ Hello Chess ================\n   #dgry /exit to exit, /help for more commands#prv#prv\n");
-    writer.indent(1);
+    //writer.indent(1);
 
     // set color used for move prompts
     this.frontend.col_white = col_white;

@@ -3,16 +3,16 @@
     .version = "1.0.0",
     .dependencies = .{
         .network = .{
-            .url = "https://github.com/MasterQ32/zig-network/archive/2caffd712f57f29abb5e41a453cd1c2129517b05.tar.gz",
-            .hash = "122095b1af33a2fbe87af9365516e6c2d21f9f5a6725b539e03bcc6ed8df3c012f39",
+            .url = "https://github.com/MasterQ32/zig-network/archive/d4506cd1950de8a6e6d3f28aed68a0b4f64e0b44.tar.gz",
+            .hash = "122080b2675fa7fdd7410af5f62942dec99e0ea766827c8c6506e6672b575fb0a50e",
         },
         .zcon = .{
-            .url = "https://github.com/PatrickTorgerson/zcon/archive/0966be5c924347fc8dfe03674d29f4c904815b0b.tar.gz",
-            .hash = "1220aae7537b85a8b1d3323d8c06111414a8ec3d2b6f21e42cc2bfc2f219c3d6963f",
+            .url = "https://github.com/PatrickTorgerson/zcon/archive/0ca28d4a76d087c2a7586c5494304a39cd455452.tar.gz",
+            .hash = "122060edaf1a011aafeb26bd8e42966e10266703a16ce1f8d8824e68302c3ba1ee0a",
         },
         .parsley = .{
-            .url = "https://github.com/PatrickTorgerson/parsley/archive/73b0dd880345de655883c5d01a5fc41d72848c65.tar.gz",
-            .hash = "12207215a0a2690d3463a9db1069177745542b20395b35175dfa5ef4200e307aa3b8",
+            .url = "https://github.com/PatrickTorgerson/parsley/archive/93a0cbd32be303fc7bcb26071975f9b8fc78f3fb.tar.gz",
+            .hash = "1220988b800c2dc0c566847ef3f5d87958aa714e1ceef7f54f5f6b2faefd24938f99",
         },
     },
     .paths = .{

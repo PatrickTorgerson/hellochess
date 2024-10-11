@@ -586,14 +586,14 @@ fn cmdFlip(this: *Frontend, args: *ArgIterator) []const u8 {
 fn commandListStatus(this: *Frontend) []const u8 {
     var stream = std.io.fixedBufferStream(&this.status_buffer);
     var writer = stream.writer();
-    cmds: for (commands.kvs[0..]) |kv| {
+    cmds: for (commands.keys(), commands.values()) |k, v| {
 
         // determine if this command is in scope
-        scopes: for (kv.value.scopes) |scope| {
+        scopes: for (v.scopes) |scope| {
             if (scope == this.play_mode) break :scopes;
         } else continue :cmds;
 
-        writer.writeAll(kv.key) catch {};
+        writer.writeAll(k) catch {};
         writer.writeAll("  ") catch {};
     }
     return this.status_buffer[0..stream.pos];
@@ -836,7 +836,7 @@ const ArgIterator = struct {
 const status_max_width = 30;
 const all_scopes = &[_]PlayMode{ .pass_and_play, .ai_opponent, .network_multiplayer, .development };
 
-const commands = std.ComptimeStringMap(Command, .{
+const commands = std.StaticStringMap(Command).initComptime(.{
     .{ "/exit", .{
         .impl = cmdExit,
         .help = "quit the game, no saving",
