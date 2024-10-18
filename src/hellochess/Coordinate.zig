@@ -242,7 +242,7 @@ pub const DirectionalIterator = struct {
         else
             unreachable;
 
-        const length = std.math.max(abs(rank_diff), abs(file_diff));
+        const length = @max(abs(rank_diff), abs(file_diff));
 
         return DirectionalIterator.init(source, dir, @as(i8, @intCast(length)) - 1);
     }
@@ -261,7 +261,7 @@ pub const DirectionalIterator = struct {
     /// we just return maxInt() in this case
     /// off by one but it's fine don't worry about it
     fn abs(val: i8) i8 {
-        return std.math.absInt(val) catch std.math.maxInt(i8);
+        return @abs(val);
     }
 };
 
@@ -436,7 +436,7 @@ const square_names: []const u8 =
     "a2b2c2d2e2f2g2h2" ++
     "a1b1c1d1e1f1g1h1";
 
-/// named square constants
+// named square constants
 pub const a8 = Coordinate.from1d(0);
 pub const b8 = Coordinate.from1d(1);
 pub const c8 = Coordinate.from1d(2);

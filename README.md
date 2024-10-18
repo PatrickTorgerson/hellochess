@@ -10,7 +10,7 @@ there's also a work in progress fullscreen mode with cli option `--fullscreen`
 
 ## Building
 
-Building requires [git](https://git-scm.com) and [zig](https://ziglang.org/download/) 0.11.0.
+Building requires [git](https://git-scm.com) and [zig](https://ziglang.org/download/) 0.13.0.
 Consider using a zig version manager like [zigup](https://github.com/marler8997/zigup) for
 easier updating and/or version swapping.
 
@@ -24,7 +24,6 @@ easier updating and/or version swapping.
  * Game analysis
  * save/load games as PGN
  * Fullscreen mode with mouse input
- * linux support
 
 ## License
 ---
