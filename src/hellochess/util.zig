@@ -8,7 +8,7 @@ const std = @import("std");
 
 /// Iterates through fields in an enum
 pub fn EnumIterator(comptime E: type) type {
-    std.debug.assert(@typeInfo(E) == .Enum); // EnumIterator, T must be an enum
+    std.debug.assert(@typeInfo(E) == .@"enum"); // EnumIterator, T must be an enum
     const size = std.meta.fields(E).len;
     const T = std.meta.Tag(E);
     return struct {
@@ -57,15 +57,15 @@ pub fn Bitfield(comptime T: type) type {
         pub const Index = std.math.Log2Int(T);
 
         pub fn set(this: *@This(), comptime V: type, offset: Index, val: V) void {
-            const len = @typeInfo(V).Int.bits;
-            std.debug.assert(offset + len <= @typeInfo(T).Int.bits);
+            const len = @typeInfo(V).int.bits;
+            std.debug.assert(offset + len <= @typeInfo(T).int.bits);
             this.bits &= ~mask(offset, len);
             this.bits |= @as(T, @intCast(val)) << offset;
         }
 
         pub fn get(this: @This(), comptime V: type, offset: Index) V {
-            const len = @typeInfo(V).Int.bits;
-            std.debug.assert(offset + len <= @typeInfo(T).Int.bits);
+            const len = @typeInfo(V).int.bits;
+            std.debug.assert(offset + len <= @typeInfo(T).int.bits);
             return @intCast((this.bits & mask(offset, len)) >> offset);
         }
 

@@ -1,18 +1,20 @@
 .{
-    .name = "hellochess",
-    .version = "1.0.0",
+    .name = .hellochess,
+    .fingerprint = 0xa6bc17fa6baae19b,
+    .version = "1.0.1",
+    .minimum_zig_version = "0.14.1",
     .dependencies = .{
-        .network = .{
-            .url = "https://github.com/MasterQ32/zig-network/archive/d4506cd1950de8a6e6d3f28aed68a0b4f64e0b44.tar.gz",
-            .hash = "122080b2675fa7fdd7410af5f62942dec99e0ea766827c8c6506e6672b575fb0a50e",
-        },
         .zcon = .{
-            .url = "https://github.com/PatrickTorgerson/zcon/archive/0ca28d4a76d087c2a7586c5494304a39cd455452.tar.gz",
-            .hash = "122060edaf1a011aafeb26bd8e42966e10266703a16ce1f8d8824e68302c3ba1ee0a",
+            .url = "git+https://github.com/PatrickTorgerson/zcon?ref=v1.2.2#e93880c25df51a5438cdd64de1a2c8e793683f5e",
+            .hash = "zcon-1.2.2-B1AhTvLuAABpOZsCH7NC1NQ47It8nIGBOATW-MoZ1lop",
         },
         .parsley = .{
-            .url = "https://github.com/PatrickTorgerson/parsley/archive/93a0cbd32be303fc7bcb26071975f9b8fc78f3fb.tar.gz",
-            .hash = "1220988b800c2dc0c566847ef3f5d87958aa714e1ceef7f54f5f6b2faefd24938f99",
+            .url = "git+https://github.com/PatrickTorgerson/parsley.git?ref=v1.3.1#38f74ca634553c5fafc6792b07170a8041c3158a",
+            .hash = "parsley-1.3.1-q_7JRCuUAQDhuAPwB9rTSmlz57MTs3P_8lc1AJeMb-9F",
+        },
+        .network = .{
+            .url = "git+https://github.com/ikskuh/zig-network.git#8f6a156a547da4b20030effa40ecba8f63b467a1",
+            .hash = "network-0.1.0-Pm-AghMmAQBfWhIrEM1V3X8VsqiCbCh0CrqNdPVwQ3LG",
         },
     },
     .paths = .{

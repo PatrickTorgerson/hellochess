@@ -79,7 +79,7 @@ fn connectToHost(
 }
 
 fn parseAddress(string: []const u8) ?struct { []const u8, u16 } {
-    var it = std.mem.split(u8, string, ":");
+    var it = std.mem.splitScalar(u8, string, ':');
     const addr = it.next() orelse return null;
     const port_str = it.next() orelse return null;
     if (it.next()) |_| return null;

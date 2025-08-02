@@ -86,11 +86,8 @@ fn parseAffiliation(string: []const u8) ?Affiliation {
     else if (std.mem.eql(u8, string, "black"))
         return .black
     else if (std.mem.eql(u8, string, "random")) {
-        const seed: u64 = if (@import("builtin").os.tag == .linux)
-            @intCast((std.time.Instant.now() catch return null).timestamp.tv_nsec)
-        else
-            (std.time.Instant.now() catch return null).timestamp;
-        var rng = std.rand.DefaultPrng.init(seed);
+        const seed = @as(u64, @truncate(@as(u128, @bitCast(std.time.nanoTimestamp()))));
+        var rng = std.Random.DefaultPrng.init(seed);
         if (rng.random().boolean())
             return .white
         else

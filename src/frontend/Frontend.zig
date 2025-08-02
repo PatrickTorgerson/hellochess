@@ -603,7 +603,7 @@ fn commandListStatus(this: *Frontend) []const u8 {
 fn confirmationStatus(this: *Frontend) []const u8 {
     _ = this;
     const seed = @as(u64, @truncate(@as(u128, @bitCast(std.time.nanoTimestamp()))));
-    var rand = std.rand.DefaultPrng.init(seed);
+    var rand = std.Random.DefaultPrng.init(seed);
     const responses = [_][]const u8{
         "gotcha",
         "okie-doki",
@@ -837,58 +837,57 @@ const status_max_width = 30;
 const all_scopes = &[_]PlayMode{ .pass_and_play, .ai_opponent, .network_multiplayer, .development };
 
 const commands = std.StaticStringMap(Command).initComptime(.{
-    .{ "/exit", .{
+    .{ "/exit", Command{
         .impl = cmdExit,
         .help = "quit the game, no saving",
         .scopes = all_scopes,
     } },
-    .{ "/help", .{
+    .{ "/help", Command{
         .impl = cmdHelp,
         .help = "args: [CMD] ; print a list of available commands, or info on a specific command [CMD]",
         .scopes = all_scopes,
     } },
-    .{ "/reset", .{
+    .{ "/reset", Command{
         .impl = cmdReset,
         .help = "reset the board for a new game",
         .scopes = &[_]PlayMode{ .pass_and_play, .ai_opponent, .development },
     } },
-    .{ "/flip", .{
+    .{ "/flip", Command{
         .impl = cmdFlip,
         .help = "flip the board perspective",
         .scopes = &[_]PlayMode{ .pass_and_play, .development },
     } },
-    .{ "/load", .{
+    .{ "/load", Command{
         .impl = cmdLoad,
         .help = "args: <FEN> ; load a position from the fen string <FEN>",
         .scopes = &[_]PlayMode{ .pass_and_play, .ai_opponent, .development },
     } },
-    .{ "/fen", .{
+    .{ "/fen", Command{
         .impl = cmdFen,
         .help = "displays the cuurrent position as a fen string",
         .scopes = all_scopes,
     } },
-
-    .{ "/clear", .{
+    .{ "/clear", Command{
         .impl = cmdClear,
         .help = "clear all pieces from the board except kings",
         .scopes = &[_]PlayMode{.development},
     } },
-    .{ "/pass", .{
+    .{ "/pass", Command{
         .impl = cmdPass,
         .help = "pass the current turn without making a move",
         .scopes = &[_]PlayMode{.development},
     } },
-    .{ "/spawn", .{
+    .{ "/spawn", Command{
         .impl = cmdSpawn,
         .help = "args: <EX> ; spawn a piece for the current affiliation at a given coord, eg. Rh8 or e3",
         .scopes = &[_]PlayMode{.development},
     } },
-    .{ "/undo", .{
+    .{ "/undo", Command{
         .impl = cmdUndo,
         .help = "undo the last played move",
         .scopes = &[_]PlayMode{.development},
     } },
-    .{ "/redo", .{
+    .{ "/redo", Command{
         .impl = cmdRedo,
         .help = "redo a previously undone move",
         .scopes = &[_]PlayMode{.development},

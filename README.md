@@ -16,7 +16,7 @@ easier updating and/or version swapping.
 
  1. clone with `git clone https://github.com/PatrickTorgerson/hellochess.git`
  1. in the root project directory run `zig build`
- 1. resulting exe can be found at `./zig-out/bin/hellochess.exe`
+ 1. resulting exe can be found at `./zig-out/bin/hellochess[.exe]`
 
 ## Planned Features (in no particular order)
  * AI opponent
